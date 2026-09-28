@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from causalforge.api.routes_events import router as events_router
 from causalforge.api.routes_health import router as health_router
@@ -59,6 +60,16 @@ def create_app(
         return JSONResponse(
             status_code=422,
             content={"code": "validation_error", "detail": "request validation failed"},
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def safe_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+        """Return a generic conflict for uniqueness races without leaking SQL details."""
+
+        del request, exc
+        return JSONResponse(
+            status_code=409,
+            content={"code": "resource_conflict", "detail": "resource state conflict"},
         )
 
     app.state.settings = runtime_settings

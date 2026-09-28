@@ -123,14 +123,13 @@ def test_api_enforces_tenant_isolation_and_redacted_event_reads(tmp_path) -> Non
         headers=auth_a,
         json={"minimum_independent_source_families": 1},
     )
-    assert verified_claim.status_code == 201
-    assert verified_claim.json()["status"] == "verified"
+    assert verified_claim.status_code == 422
     claim_attempts = client.get(
         f"/api/v1/incidents/{case_id}/claims/{claim_id}/verifications",
         headers=auth_a,
     )
     assert claim_attempts.status_code == 200
-    assert [item["status"] for item in claim_attempts.json()] == ["verified", "unknown"]
+    assert [item["status"] for item in claim_attempts.json()] == ["unknown"]
 
     cross_tenant = client.get(f"/api/v1/incidents/{case_id}", headers=auth_b)
     assert cross_tenant.status_code == 404
@@ -233,8 +232,8 @@ def test_api_persists_and_verifies_hypothesis_with_independent_sources(tmp_path)
         json={"minimum_independent_source_families": 2},
     )
     assert verified.status_code == 201
-    assert verified.json()["status"] == "supported"
-    assert verified.json()["source_families"] == ["kubernetes_audit", "runtime_sensor"]
+    assert verified.json()["status"] == "insufficient_evidence"
+    assert "semantic_verification_required" in verified.json()["unmet_requirements"]
 
     listed = client.get(f"/api/v1/incidents/{case_id}/hypotheses", headers=auth_a)
     attempts = client.get(
@@ -242,7 +241,7 @@ def test_api_persists_and_verifies_hypothesis_with_independent_sources(tmp_path)
         headers=auth_a,
     )
     assert listed.status_code == 200
-    assert listed.json()[0]["status"] == "supported"
+    assert listed.json()[0]["status"] == "insufficient_evidence"
     assert attempts.status_code == 200
     assert len(attempts.json()) == 1
 
@@ -334,3 +333,18 @@ def test_api_validation_errors_do_not_echo_unredacted_request_bodies(tmp_path) -
         "detail": "request validation failed",
     }
     assert "validation-secret-must-not-echo" not in response.text
+
+
+def test_api_duplicate_incident_has_safe_conflict_shape(tmp_path) -> None:
+    client, tenant_a, _ = make_client(tmp_path)
+    case_id = uuid4()
+    auth = headers(tenant_a, "alice")
+    payload = {"incident_id": str(case_id), "title": "Conflict fixture"}
+    assert client.post("/api/v1/incidents", headers=auth, json=payload).status_code == 201
+
+    response = client.post("/api/v1/incidents", headers=auth, json=payload)
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "incident already exists",
+    }
