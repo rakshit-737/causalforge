@@ -3,10 +3,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from causalforge.domain.claims import Claim, ConfidenceComponents
 from causalforge.domain.evidence import EvidenceItem
 from causalforge.domain.hypotheses import Hypothesis, RiskAssessment
 from causalforge.ingestion.normalizer import normalize_event
-from causalforge.workflow.verifier import VerificationPolicy, verify_hypothesis
+from causalforge.workflow.verifier import VerificationPolicy, verify_claim, verify_hypothesis
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000010")
 CASE_ID = UUID("00000000-0000-0000-0000-000000000020")
@@ -59,6 +60,33 @@ def hypothesis(observation_ids: tuple[UUID, ...]) -> Hypothesis:
         initial_confidence=0.6,
         risk_if_true=RiskAssessment(severity="high", rationale="secret material may be exposed"),
         status="proposed",
+    )
+
+
+def claim_for(
+    supporting: tuple[EvidenceItem, ...], contradictory: tuple[EvidenceItem, ...] = ()
+) -> Claim:
+    return Claim(
+        schema_version="1.0",
+        claim_id=uuid4(),
+        case_id=CASE_ID,
+        tenant_id=TENANT_ID,
+        subject="orders-reader",
+        predicate="list secret",
+        object={"kind": "secret"},
+        status="observed",
+        supporting_evidence_ids=tuple(item.evidence_id for item in supporting),
+        contradictory_evidence_ids=tuple(item.evidence_id for item in contradictory),
+        confidence_components=ConfidenceComponents(
+            source_reliability=1.0,
+            temporal_consistency=1.0,
+            coverage=1.0,
+            contradiction_penalty=0.0,
+            final=1.0,
+        ),
+        temporal_consistency=True,
+        source_families=tuple(item.source_family for item in supporting),
+        coverage_sufficient=True,
     )
 
 
@@ -142,3 +170,37 @@ def test_verifier_rejects_cross_tenant_evidence() -> None:
 
     with pytest.raises(ValueError, match="tenant and case"):
         verify_hypothesis(hypothesis((event_id,)), [other])
+
+
+def test_claim_verifier_promotes_only_independent_complete_support() -> None:
+    first = evidence(event_id=uuid4(), source_kind="kubernetes_audit")
+    second = evidence(event_id=uuid4(), source_kind="runtime_sensor")
+
+    decision = verify_claim(
+        claim_for((first, second)),
+        [first, second],
+        now=datetime(2026, 9, 28, 11, tzinfo=UTC),
+    )
+
+    assert decision.status == "verified"
+    assert decision.coverage_sufficient is True
+
+
+def test_claim_verifier_marks_contradictions_disputed_and_single_source_unknown() -> None:
+    supporting = evidence(event_id=uuid4(), source_kind="kubernetes_audit")
+    contradictory = evidence(event_id=uuid4(), source_kind="runtime_sensor")
+    disputed = verify_claim(
+        claim_for((supporting,), (contradictory,)),
+        [supporting, contradictory],
+        now=datetime(2026, 9, 28, 11, tzinfo=UTC),
+    )
+    unknown = verify_claim(
+        claim_for((supporting,)),
+        [supporting],
+        now=datetime(2026, 9, 28, 11, tzinfo=UTC),
+    )
+
+    assert disputed.status == "disputed"
+    assert disputed.contradictory_evidence_ids == (contradictory.evidence_id,)
+    assert unknown.status == "unknown"
+    assert "independent_source_families" in unknown.unmet_requirements
