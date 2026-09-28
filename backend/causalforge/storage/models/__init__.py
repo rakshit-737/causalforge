@@ -3,6 +3,7 @@
 from causalforge.storage.models.audit import AuditEntryRecord
 from causalforge.storage.models.base import Base
 from causalforge.storage.models.claim import ClaimRecord
+from causalforge.storage.models.claim_verification import ClaimVerificationRecord
 from causalforge.storage.models.detection import DetectionRecord
 from causalforge.storage.models.document import DocumentChunkRecord, DocumentRecord
 from causalforge.storage.models.event import EventRecord
@@ -16,6 +17,7 @@ __all__ = [
     "AuditEntryRecord",
     "Base",
     "ClaimRecord",
+    "ClaimVerificationRecord",
     "DetectionRecord",
     "DocumentChunkRecord",
     "DocumentRecord",

@@ -8,7 +8,7 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
-SCHEMA_REVISION = "0007_hypothesis_workflow"
+SCHEMA_REVISION = "0008_claim_verification"
 
 
 class UTCDateTime(TypeDecorator[datetime]):

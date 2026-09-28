@@ -1,11 +1,13 @@
 """Persisted evidence-bound claim."""
 
 from datetime import datetime
+from typing import cast
+from uuid import UUID
 
 from sqlalchemy import JSON, Boolean, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from causalforge.domain.claims import Claim
+from causalforge.domain.claims import Claim, ClaimStatus, ConfidenceComponents
 from causalforge.storage.models.base import Base, UTCDateTime
 
 
@@ -53,4 +55,28 @@ class ClaimRecord(Base):
             source_families=list(claim.source_families),
             coverage_sufficient=claim.coverage_sufficient,
             created_at=created_at,
+        )
+
+    def to_claim(self) -> Claim:
+        """Revalidate a persisted claim before a verification attempt."""
+
+        return Claim(
+            schema_version="1.0",
+            claim_id=UUID(self.id),
+            case_id=UUID(self.incident_id),
+            tenant_id=UUID(self.tenant_id),
+            subject=self.subject,
+            predicate=self.predicate,
+            object=self.object_value,
+            status=cast(ClaimStatus, self.status),
+            supporting_evidence_ids=tuple(
+                UUID(value) for value in self.supporting_evidence_ids
+            ),
+            contradictory_evidence_ids=tuple(
+                UUID(value) for value in self.contradictory_evidence_ids
+            ),
+            confidence_components=ConfidenceComponents.model_validate(self.confidence_components),
+            temporal_consistency=self.temporal_consistency,
+            source_families=tuple(self.source_families),
+            coverage_sufficient=self.coverage_sufficient,
         )

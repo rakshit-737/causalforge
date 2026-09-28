@@ -43,7 +43,8 @@ def test_database_schema_contains_phase1_tables(tmp_path) -> None:
 
     assert set(inspect(database.engine).get_table_names()) == {
         "audit_entries",
-        "claims",
+            "claims",
+            "claim_verification_records",
         "detections",
         "document_chunks",
         "documents",
