@@ -18,6 +18,11 @@ def test_local_settings_reject_external_network_access() -> None:
         Settings(environment="lab", external_network_enabled=True)
 
 
+def test_development_identity_headers_require_loopback_binding() -> None:
+    with pytest.raises(ValueError, match="loopback host"):
+        Settings(host="0.0.0.0")
+
+
 def test_production_settings_reject_auto_schema_creation() -> None:
     with pytest.raises(ValueError, match="auto_create_schema"):
         Settings(

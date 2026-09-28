@@ -59,6 +59,11 @@ class Settings(BaseSettings):
             raise ValueError("auto_create_schema must be false in production")
         if self.environment == "production":
             raise ValueError("production mode is unsupported until authentication is implemented")
+        if self.host not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError(
+                "development identity headers require a loopback host until "
+                "authentication is implemented"
+            )
         if not self.lab_only or self.external_network_enabled:
             raise ValueError("lab_only must remain true and external network access disabled")
         if self.debug or self.database_echo:
