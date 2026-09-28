@@ -1,6 +1,7 @@
 """Canonical event persistence model."""
 
 from datetime import datetime
+from uuid import uuid4
 
 from sqlalchemy import JSON, Boolean, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,10 +17,12 @@ class EventRecord(Base):
     __tablename__ = "events"
     __table_args__ = (
         UniqueConstraint("tenant_id", "deduplication_key", name="uq_events_tenant_deduplication"),
+        UniqueConstraint("tenant_id", "producer_event_id", name="uq_events_tenant_producer_id"),
         Index("ix_events_tenant_observed_at", "tenant_id", "observed_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    producer_event_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     tenant_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -48,7 +51,8 @@ class EventRecord(Base):
         """Map a canonical event to a redacted persistence row."""
 
         return cls(
-            id=str(event.event_id),
+            id=str(uuid4()),
+            producer_event_id=str(event.event_id),
             tenant_id=str(event.tenant_id),
             observed_at=event.observed_at,
             ingested_at=event.ingested_at,

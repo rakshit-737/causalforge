@@ -44,7 +44,9 @@ def normalize_event(
     redacted_payload["schema_version"] = "1.0"
     redacted_payload["parser_version"] = parser_version
     redacted_payload["raw_payload_sha256"] = raw_payload_sha256
-    redacted_payload.setdefault("ingested_at", clock())
+    # Receipt time is controlled by the CausalForge process. A producer-supplied timestamp is
+    # untrusted data and must not rewrite the ledger's ingestion chronology.
+    redacted_payload["ingested_at"] = clock()
 
     try:
         event = CanonicalEvent.model_validate(redacted_payload)

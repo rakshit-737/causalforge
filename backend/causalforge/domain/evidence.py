@@ -60,10 +60,18 @@ class EvidenceItem(BaseModel):
             observed_at=event.observed_at,
             collected_at=collected_at,
             parser_version=event.parser_version,
-            content_hash=sha256_hex(normalized),
+            content_hash=cls.content_hash_for(normalized),
             redaction_profile=redaction_profile,
             coverage=event.coverage,
             normalized=normalized,
             source_reliability=source_reliability,
             source_family=source_family,
         )
+
+    @staticmethod
+    def content_hash_for(normalized: dict[str, Any]) -> str:
+        """Hash stable observation content while excluding server receipt time."""
+
+        stable = dict(normalized)
+        stable.pop("ingested_at", None)
+        return sha256_hex(stable)

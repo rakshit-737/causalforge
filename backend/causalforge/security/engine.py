@@ -18,10 +18,12 @@ from causalforge.audit.ledger import AuditLedger
 from causalforge.detection.correlation import CorrelationEngine, CorrelationMatch, CorrelationRule
 from causalforge.detection.sigma_engine import SigmaEngine, SigmaRule
 from causalforge.domain.claims import Claim
+from causalforge.domain.events import CanonicalEvent
 from causalforge.graph.projector import TemporalAttackGraph
 from causalforge.graph.rbac import RBACSnapshot
 from causalforge.ingestion.service import IngestionService, IngestResult
 from causalforge.storage.models import ClaimRecord, DetectionRecord, IncidentRecord
+from causalforge.storage.repositories.evidence import EvidenceRepository
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ class DeterministicCaseEngine:
         tenant_id: UUID,
         case_id: UUID,
         title: str,
+        actor: Mapping[str, str] | None = None,
     ) -> IncidentRecord:
         incident = session.scalar(select(IncidentRecord).where(IncidentRecord.id == str(case_id)))
         if incident is not None:
@@ -90,7 +93,8 @@ class DeterministicCaseEngine:
             session,
             tenant_id=tenant_id,
             case_id=case_id,
-            actor={"kind": "system", "id": "deterministic-engine", "role": "coordinator"},
+            actor=actor
+            or {"kind": "system", "id": "deterministic-engine", "role": "coordinator"},
             event_type="incident.created",
             payload={"title": title},
             policy_decision="allow",
@@ -121,13 +125,13 @@ class DeterministicCaseEngine:
             tenant_id=tenant_id,
             case_id=case_id,
             title=title,
+            actor=actor,
         )
         graph = TemporalAttackGraph()
         if rbac_snapshot is not None:
             for rule in rbac_snapshot.rules:
                 graph.project_rbac_rule(rule)
         ingested: list[IngestResult] = []
-        events = []
         for payload in payloads:
             result = self.ingestion.ingest(
                 session,
@@ -138,13 +142,17 @@ class DeterministicCaseEngine:
                 actor=actor,
             )
             ingested.append(result)
-            if result.duplicate or result.evidence_record is None:
-                continue
-            events.append(result.normalized.event)
-            graph.project_event(
-                result.normalized.event,
-                evidence_id=result.evidence_record.id,
-            )
+        evidence_rows = self.ingestion.evidence.list_for_case(
+            session,
+            tenant_id=tenant_id,
+            case_id=case_id,
+        )
+        events = []
+        for evidence_row in evidence_rows:
+            EvidenceRepository.verify_integrity(evidence_row)
+            event = self._event_from_evidence(evidence_row.normalized)
+            events.append(event)
+            graph.project_event(event, evidence_id=evidence_row.id)
 
         matches = self.sigma.detect(self.rules, events)
         correlations = [
@@ -183,10 +191,10 @@ class DeterministicCaseEngine:
             incident.updated_at = datetime.now(UTC)
 
         claims: list[ClaimRecord] = []
+        new_claim_ids: list[str] = []
         for result in ingested:
             if (
-                result.duplicate
-                or result.evidence_record is None
+                result.evidence_record is None
                 or not self._is_claim_candidate(result)
             ):
                 continue
@@ -197,12 +205,15 @@ class DeterministicCaseEngine:
                 evidence_id=UUID(result.evidence_record.id),
                 source_reliability=result.evidence_record.source_reliability,
             )
-            claim_record = ClaimRecord.from_claim(claim, created_at=event.observed_at)
-            session.add(claim_record)
-            session.flush()
+            claim_record = session.get(ClaimRecord, str(claim.claim_id))
+            if claim_record is None:
+                claim_record = ClaimRecord.from_claim(claim, created_at=event.observed_at)
+                session.add(claim_record)
+                session.flush()
+                new_claim_ids.append(claim_record.id)
             claims.append(claim_record)
 
-        if new_detection_ids or correlations or claims:
+        if new_detection_ids or new_claim_ids:
             self.audit.append(
                 session,
                 tenant_id=tenant_id,
@@ -216,7 +227,7 @@ class DeterministicCaseEngine:
                         {"rule_id": match.rule_id, "event_ids": list(match.event_ids)}
                         for match in correlations
                     ],
-                    "claim_ids": [record.id for record in claims],
+                    "claim_ids": new_claim_ids,
                 },
                 policy_decision="allow",
             )
@@ -228,3 +239,9 @@ class DeterministicCaseEngine:
             claims=tuple(claims),
             graph=graph,
         )
+
+    @staticmethod
+    def _event_from_evidence(payload: Mapping[str, Any]) -> CanonicalEvent:
+        """Validate persisted normalized evidence before projecting it."""
+
+        return CanonicalEvent.model_validate(payload)

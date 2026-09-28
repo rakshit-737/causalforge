@@ -148,10 +148,13 @@ class TemporalAttackGraph:
             destination_node = node_id("service", destination)
             self.graph.add_node(destination_node, kind="service", canonical_key=destination)
             source_node = node_id("workload", workload) if workload else actor
+            relationship = (
+                "communicated_with" if event.outcome == "allowed" else "attempted_communication"
+            )
             self._add_edge(
                 source_node,
                 destination_node,
-                relationship="communicated_with",
+                relationship=relationship,
                 event=event,
                 evidence_id=evidence_id,
             )

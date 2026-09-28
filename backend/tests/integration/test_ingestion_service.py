@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy import select
 
 from causalforge.audit.ledger import AuditLedger
@@ -9,6 +10,7 @@ from causalforge.storage.db import Database
 from causalforge.storage.models.audit import AuditEntryRecord
 from causalforge.storage.models.event import EventRecord
 from causalforge.storage.models.evidence import EvidenceRecord
+from causalforge.storage.repositories.evidence import EvidenceRepository
 
 
 def event_payload(tenant_id: UUID) -> dict[str, object]:
@@ -75,17 +77,27 @@ def test_ingestion_is_idempotent_for_duplicate_payload(tmp_path) -> None:
     raw = event_payload(tenant_id)
 
     with database.session() as session:
-        first = service.ingest(session, payload=raw, case_id=uuid4(), parser_version="fixture-1.0")
+        first_case = uuid4()
+        second_case = uuid4()
+        first = service.ingest(
+            session, payload=raw, case_id=first_case, parser_version="fixture-1.0"
+        )
         session.commit()
-        second = service.ingest(session, payload=raw, case_id=uuid4(), parser_version="fixture-1.0")
+        second = service.ingest(
+            session, payload=raw, case_id=second_case, parser_version="fixture-1.0"
+        )
         session.commit()
 
         assert first.duplicate is False
         assert second.duplicate is True
+        assert second.evidence_record is not None
         assert session.scalar(select(EventRecord)) is not None
         assert len(list(session.scalars(select(EventRecord)))) == 1
-        assert len(list(session.scalars(select(EvidenceRecord)))) == 1
-        assert len(list(session.scalars(select(AuditEntryRecord)))) == 1
+        assert len(list(session.scalars(select(EvidenceRecord)))) == 2
+        assert {
+            record.case_id for record in session.scalars(select(EvidenceRecord))
+        } == {str(first_case), str(second_case)}
+        assert len(list(session.scalars(select(AuditEntryRecord)))) == 2
 
 
 def test_audit_chain_detects_tampering(tmp_path) -> None:
@@ -121,3 +133,51 @@ def test_audit_chain_detects_tampering(tmp_path) -> None:
         assert row is not None
         row.entry_hash = "f" * 64
         assert ledger.verify(session, tenant_id=tenant_id, case_id=case_id) is False
+
+
+def test_evidence_integrity_check_detects_normalized_payload_tampering(tmp_path) -> None:
+    tenant_id = uuid4()
+    case_id = uuid4()
+    database = Database(f"sqlite:///{tmp_path / 'evidence-integrity.db'}")
+    database.create_schema()
+    service = IngestionService()
+
+    with database.session() as session:
+        result = service.ingest(
+            session,
+            payload=event_payload(tenant_id),
+            case_id=case_id,
+            parser_version="fixture-1.0",
+        )
+        session.commit()
+        assert result.evidence_record is not None
+        result.evidence_record.normalized["action"] = "tampered"
+
+        with pytest.raises(ValueError, match="content hash"):
+            EvidenceRepository.verify_integrity(result.evidence_record)
+
+
+def test_same_producer_event_id_can_exist_in_two_tenants(tmp_path) -> None:
+    tenant_a = uuid4()
+    tenant_b = uuid4()
+    database = Database(f"sqlite:///{tmp_path / 'event-identity.db'}")
+    database.create_schema()
+    service = IngestionService()
+    producer_event_id = str(uuid4())
+    raw_a = event_payload(tenant_a)
+    raw_b = event_payload(tenant_b)
+    raw_a["event_id"] = producer_event_id
+    raw_b["event_id"] = producer_event_id
+
+    with database.session() as session:
+        first = service.ingest(
+            session, payload=raw_a, case_id=uuid4(), parser_version="fixture-1.0"
+        )
+        second = service.ingest(
+            session, payload=raw_b, case_id=uuid4(), parser_version="fixture-1.0"
+        )
+        session.commit()
+
+    assert first.event_record.id != second.event_record.id
+    assert first.event_record.producer_event_id == producer_event_id
+    assert second.event_record.producer_event_id == producer_event_id

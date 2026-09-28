@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, Index, String
+from sqlalchemy import JSON, Boolean, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from causalforge.domain.evidence import EvidenceItem
@@ -15,6 +15,12 @@ class EvidenceRecord(Base):
     __tablename__ = "evidence_items"
     __table_args__ = (
         Index("ix_evidence_tenant_case_observed_at", "tenant_id", "case_id", "observed_at"),
+        UniqueConstraint(
+            "tenant_id",
+            "case_id",
+            "content_hash",
+            name="uq_evidence_tenant_case_content",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

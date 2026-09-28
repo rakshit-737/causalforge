@@ -59,14 +59,6 @@ class IngestionService:
         if expected_tenant_id is not None and normalized.event.tenant_id != expected_tenant_id:
             raise ValueError("event tenant does not match the requested case tenant")
         event_record, inserted = self.events.append(session, event=normalized.event)
-        if not inserted:
-            return IngestResult(
-                normalized=normalized,
-                event_record=event_record,
-                evidence_record=None,
-                duplicate=True,
-            )
-
         collected = collected_at or datetime.now(UTC)
         evidence = EvidenceItem.from_event(
             normalized.event,
@@ -76,29 +68,31 @@ class IngestionService:
             source_reliability=source_reliability,
             source_family=source_family or normalized.event.source.kind,
         )
-        evidence_record = self.evidence.append(session, evidence=evidence)
-        self.audit.append(
-            session,
-            tenant_id=normalized.event.tenant_id,
-            case_id=case_id,
-            actor=actor
-            or {
-                "kind": "connector",
-                "id": normalized.event.source.name,
-                "role": "ingest",
-            },
-            event_type="evidence.ingested",
-            payload={
-                "event_id": str(normalized.event.event_id),
-                "evidence_id": str(evidence.evidence_id),
-                "redacted_paths": list(normalized.redaction.paths),
-            },
-            policy_decision="allow",
-            created_at=collected,
-        )
+        evidence_record, evidence_inserted = self.evidence.append(session, evidence=evidence)
+        if evidence_inserted:
+            self.audit.append(
+                session,
+                tenant_id=normalized.event.tenant_id,
+                case_id=case_id,
+                actor=actor
+                or {
+                    "kind": "connector",
+                    "id": normalized.event.source.name,
+                    "role": "ingest",
+                },
+                event_type="evidence.ingested",
+                payload={
+                    "event_id": str(normalized.event.event_id),
+                    "evidence_id": str(evidence_record.id),
+                    "content_hash": evidence_record.content_hash,
+                    "redacted_paths": list(normalized.redaction.paths),
+                },
+                policy_decision="allow",
+                created_at=collected,
+            )
         return IngestResult(
             normalized=normalized,
             event_record=event_record,
             evidence_record=evidence_record,
-            duplicate=False,
+            duplicate=not inserted,
         )

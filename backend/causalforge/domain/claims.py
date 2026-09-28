@@ -1,7 +1,7 @@
 """Evidence-bound claim models created by deterministic security services."""
 
 from typing import Any, Literal
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -66,7 +66,10 @@ class Claim(BaseModel):
         final = min(source_reliability, coverage_score)
         return cls(
             schema_version="1.0",
-            claim_id=uuid4(),
+            claim_id=uuid5(
+                NAMESPACE_URL,
+                f"causalforge:observed:{case_id}:{evidence_id}:{event.action}:{event.object.kind}",
+            ),
             case_id=case_id,
             tenant_id=event.tenant_id,
             subject=event.actor.id,

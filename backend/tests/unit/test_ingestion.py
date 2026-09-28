@@ -81,3 +81,33 @@ def test_coverage_window_must_be_ordered() -> None:
 
     with pytest.raises(NormalizationError):
         normalize_event(bad, parser_version="fixture-1.0")
+
+
+def test_server_controls_ingested_at() -> None:
+    raw = payload()
+    raw["ingested_at"] = "2099-01-01T00:00:00Z"
+    server_time = datetime(2026, 9, 28, 10, 3, 1, tzinfo=UTC)
+
+    result = normalize_event(raw, parser_version="fixture-1.0", clock=lambda: server_time)
+
+    assert result.event.ingested_at == server_time
+
+
+def test_redaction_covers_camel_case_headers_and_bearer_values() -> None:
+    raw = payload()
+    raw["attributes"] = {
+        "accessToken": "not-stored",
+        "x-api-key": "not-stored",
+        "DB_PASSWORD": "not-stored",
+        "headers": {"Cookie": "session=not-stored"},
+        "message": "Authorization: Bearer abcdefghijklmnop",
+    }
+
+    result = normalize_event(raw, parser_version="fixture-1.0")
+
+    attributes = result.event.attributes
+    assert attributes["accessToken"] == "[REDACTED]"
+    assert attributes["x-api-key"] == "[REDACTED]"
+    assert attributes["DB_PASSWORD"] == "[REDACTED]"
+    assert attributes["headers"]["Cookie"] == "[REDACTED]"
+    assert "abcdefghijklmnop" not in attributes["message"]

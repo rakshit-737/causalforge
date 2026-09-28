@@ -74,6 +74,36 @@ def test_denied_event_is_not_projected_as_access() -> None:
     ]
 
 
+def test_denied_destination_is_attempted_not_communicated() -> None:
+    event = normalize_event(
+        {
+            "event_id": str(uuid4()),
+            "tenant_id": str(uuid4()),
+            "source": {"kind": "network_flow", "name": "fixture", "version": "1.0"},
+            "observed_at": "2026-09-28T10:03:00Z",
+            "actor": {"kind": "workload", "id": "orders-api"},
+            "action": "connect",
+            "object": {"kind": "service", "namespace": "billing", "name": "billing-api"},
+            "outcome": "denied",
+            "attributes": {"destination_service": "billing-api"},
+            "coverage": {
+                "source_complete_for_window": True,
+                "window_start": "2026-09-28T10:00:00Z",
+                "window_end": "2026-09-28T10:05:00Z",
+            },
+        },
+        parser_version="fixture-1.0",
+    ).event
+    graph = TemporalAttackGraph()
+    graph.project_event(event, evidence_id=uuid4())
+
+    source = node_id("workload", "orders-api")
+    assert graph.neighbors(source, relationship="communicated_with") == []
+    assert graph.neighbors(source, relationship="attempted_communication") == [
+        node_id("service", "billing-api")
+    ]
+
+
 def test_path_respects_temporal_validity() -> None:
     graph = TemporalAttackGraph()
     event_time = datetime(2026, 9, 28, 10, 3, tzinfo=UTC)

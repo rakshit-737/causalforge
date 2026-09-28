@@ -1,5 +1,6 @@
 """Recursive redaction for untrusted telemetry before persistence or model context."""
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -19,7 +20,17 @@ _SENSITIVE_KEYS = frozenset(
         "private_key",
         "credential",
         "credentials",
+        "cookie",
+        "set_cookie",
+        "session_id",
+        "session_cookie",
     }
+)
+_SENSITIVE_KEY_PARTS = frozenset(
+    {"password", "passwd", "secret", "token", "authorization", "cookie", "credential"}
+)
+_SENSITIVE_VALUE = re.compile(
+    r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"
 )
 
 
@@ -32,7 +43,12 @@ class RedactionResult:
 
 
 def _key_is_sensitive(key: str) -> bool:
-    return key.casefold().replace("-", "_") in _SENSITIVE_KEYS
+    normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key)
+    normalized = re.sub(r"[^a-zA-Z0-9]+", "_", normalized).strip("_").casefold()
+    if normalized in _SENSITIVE_KEYS:
+        return True
+    parts = set(normalized.split("_"))
+    return bool(parts & _SENSITIVE_KEY_PARTS) or "api_key" in normalized
 
 
 def _redact(value: Any, path: str) -> tuple[Any, list[str]]:
@@ -59,6 +75,8 @@ def _redact(value: Any, path: str) -> tuple[Any, list[str]]:
             output_list.append(redacted_child)
             paths.extend(child_paths)
         return output_list, paths
+    if isinstance(value, str) and _SENSITIVE_VALUE.search(value):
+        return _SENSITIVE_VALUE.sub(REDACTED, value), [path]
     return value, []
 
 
