@@ -1,6 +1,6 @@
 """Immutable evidence item model derived from canonical observations."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -49,6 +49,13 @@ class EvidenceItem(BaseModel):
             raise ValueError("evidence normalized payload is not a canonical event") from exc
         if event.tenant_id != self.tenant_id:
             raise ValueError("evidence tenant does not match its normalized event")
+        if (
+            event.source != self.source
+            or event.observed_at != self.observed_at
+            or event.parser_version != self.parser_version
+            or event.coverage != self.coverage
+        ):
+            raise ValueError("evidence provenance metadata does not match its normalized event")
         if self.content_hash_for(self.normalized) != self.content_hash:
             raise ValueError("evidence content hash does not match its normalized event")
         expected_provenance_hash = self.provenance_hash_for(
@@ -153,12 +160,15 @@ class EvidenceItem(BaseModel):
                 "case_id": str(case_id),
                 "tenant_id": str(tenant_id),
                 "source": source.model_dump(mode="json"),
-                "observed_at": observed_at.isoformat(),
-                "collected_at": collected_at.isoformat(),
+                "observed_at": observed_at.astimezone(UTC).isoformat(),
+                "collected_at": collected_at.astimezone(UTC).isoformat(),
                 "parser_version": parser_version,
                 "content_hash": content_hash,
                 "redaction_profile": redaction_profile,
-                "coverage": coverage.model_dump(mode="json"),
+                "coverage": coverage.model_copy(update={
+                    "window_start": coverage.window_start.astimezone(UTC),
+                    "window_end": coverage.window_end.astimezone(UTC),
+                }).model_dump(mode="json"),
                 "raw_reference": raw_reference,
                 "source_reliability": source_reliability,
                 "source_family": source_family,

@@ -25,6 +25,7 @@ class VerificationPolicy(BaseModel):
     minimum_independent_source_families: int = Field(default=2, ge=2, le=20, strict=True)
     require_complete_coverage: Literal[True] = True
     max_evidence_items: int = Field(default=100, ge=1, le=10_000)
+    max_observation_span_seconds: int = Field(default=300, ge=0, le=300, strict=True)
     deadline: datetime | None = None
 
     @field_validator("deadline")
@@ -94,6 +95,8 @@ def _validated_evidence(
 ) -> tuple[EvidenceItem, ...]:
     if any(item.tenant_id != tenant_id or item.case_id != case_id for item in evidence):
         raise ValueError("verification evidence must match the tenant and case")
+    if len({item.evidence_id for item in evidence}) != len(evidence):
+        raise ValueError("duplicate evidence identifiers")
     # A frozen Pydantic object still contains mutable JSON; model_copy also bypasses validation.
     ordered = sorted(evidence, key=lambda item: (item.observed_at, str(item.evidence_id)))
     return tuple(EvidenceItem.model_validate(item.model_dump()) for item in ordered[:limit])
@@ -119,18 +122,19 @@ def _claim_matches_event(claim: Claim, evidence: EvidenceItem) -> bool:
     """Check the narrow deterministic semantics supported by observed event claims."""
 
     event = CanonicalEvent.model_validate(evidence.normalized)
+    if event.outcome != "allowed":
+        return False
+    if event.object.kind not in {"secret", "configmap"} or event.action not in {
+        "get", "list", "watch", "create", "update", "patch", "delete",
+    }:
+        return False
     if event.actor.id != claim.subject or f"{event.action} {event.object.kind}" != claim.predicate:
         return False
-    if not isinstance(claim.object, dict):
-        return claim.object is None
-    return all(
-        value is None or value == event_object
-        for value, event_object in (
-            (claim.object.get("kind"), event.object.kind),
-            (claim.object.get("namespace"), event.object.namespace),
-            (claim.object.get("name"), event.object.name),
-        )
-    )
+    return claim.object == {
+        "kind": event.object.kind,
+        "namespace": event.object.namespace,
+        "name": event.object.name,
+    }
 
 
 def _decision(
@@ -338,19 +342,31 @@ def verify_claim(
     temporal_consistency = all(
         item.coverage.window_start <= item.observed_at <= item.coverage.window_end
         for item in ordered_supporting
-    )
-    coverage_sufficient = all(
+    ) and bool(ordered_supporting)
+    if ordered_supporting:
+        span = ordered_supporting[-1].observed_at - ordered_supporting[0].observed_at
+        temporal_consistency = (
+            temporal_consistency and span.total_seconds()
+            <= effective_policy.max_observation_span_seconds
+        )
+    coverage_sufficient = bool(ordered_supporting) and all(
         item.coverage.source_complete_for_window for item in ordered_supporting
     ) and temporal_consistency
     unmet: list[str] = []
     if not ordered_supporting:
         unmet.append("supporting_evidence")
-    if claim.status not in {"observed", "derived"}:
+    if (supporting_ids | contradictory_ids) - {item.evidence_id for item in bounded_evidence}:
+        unmet.append("missing_evidence_reference")
+    if claim.status in {"derived", "hypothesized", "rejected"}:
         unmet.append("unsupported_claim_status")
     if not all(_claim_matches_event(claim, item) for item in ordered_supporting):
         unmet.append("claim_semantics")
     if not trusted:
         unmet.append("untrusted_source")
+    if any(item.source_reliability <= 0 for item in ordered_supporting):
+        unmet.append("unreliable_source")
+    if not temporal_consistency:
+        unmet.append("temporal_consistency")
     if len(source_families) < effective_policy.minimum_independent_source_families:
         unmet.append("independent_source_families")
     if effective_policy.require_complete_coverage and not coverage_sufficient:

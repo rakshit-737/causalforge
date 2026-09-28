@@ -18,8 +18,11 @@ TENANT_ID = UUID("00000000-0000-0000-0000-000000000010")
 CASE_ID = UUID("00000000-0000-0000-0000-000000000020")
 
 
-def evidence(*, event_id: UUID, source_kind: str, complete: bool = True) -> EvidenceItem:
-    observed_at = datetime(2026, 9, 28, 10, 3, tzinfo=UTC)
+def evidence(
+    *, event_id: UUID, source_kind: str, complete: bool = True,
+    outcome: str = "allowed", observed_at: datetime | None = None,
+) -> EvidenceItem:
+    observed_at = observed_at or datetime(2026, 9, 28, 10, 3, tzinfo=UTC)
     payload = {
         "event_id": str(event_id),
         "tenant_id": str(TENANT_ID),
@@ -28,12 +31,12 @@ def evidence(*, event_id: UUID, source_kind: str, complete: bool = True) -> Evid
         "actor": {"kind": "service_account", "id": "orders-reader"},
         "action": "list",
         "object": {"kind": "secret", "namespace": "orders", "name": None},
-        "outcome": "allowed",
+        "outcome": outcome,
         "attributes": {},
         "coverage": {
             "source_complete_for_window": complete,
             "window_start": "2026-09-28T10:00:00Z",
-            "window_end": "2026-09-28T10:05:00Z",
+            "window_end": "2026-09-28T12:00:00Z",
         },
     }
     event = normalize_event(
@@ -78,7 +81,7 @@ def claim_for(
         tenant_id=TENANT_ID,
         subject="orders-reader",
         predicate="list secret",
-        object={"kind": "secret"},
+        object={"kind": "secret", "namespace": "orders", "name": None},
         status="observed",
         supporting_evidence_ids=tuple(item.evidence_id for item in supporting),
         contradictory_evidence_ids=tuple(item.evidence_id for item in contradictory),
@@ -247,3 +250,100 @@ def test_claim_verifier_does_not_promote_mismatched_event_semantics() -> None:
 
     assert decision.status == "unknown"
     assert "claim_semantics" in decision.unmet_requirements
+
+
+TRUSTED_FIXTURE_SOURCES = tuple(
+    TrustedSource(kind=kind, name="fixture", version="1.0", independent_family=kind)
+    for kind in ("kubernetes_audit", "runtime_sensor")
+)
+
+
+@pytest.mark.parametrize("outcome", ["denied", "error", "unknown"])
+def test_non_success_events_cannot_verify_successful_access(outcome) -> None:
+    items = tuple(
+        evidence(event_id=uuid4(), source_kind=source.kind, outcome=outcome)
+        for source in TRUSTED_FIXTURE_SOURCES
+    )
+    decision = verify_claim(
+        claim_for(items), items, trusted_sources=TRUSTED_FIXTURE_SOURCES
+    )
+    assert decision.status == "unknown"
+    assert "claim_semantics" in decision.unmet_requirements
+
+
+@pytest.mark.parametrize("field", ["supporting_evidence_ids", "contradictory_evidence_ids"])
+def test_missing_citations_prevent_promotion(field) -> None:
+    items = tuple(
+        evidence(event_id=uuid4(), source_kind=source.kind)
+        for source in TRUSTED_FIXTURE_SOURCES
+    )
+    claim = claim_for(items)
+    claim = claim.model_copy(update={field: (*getattr(claim, field), uuid4())})
+    decision = verify_claim(claim, items, trusted_sources=TRUSTED_FIXTURE_SOURCES)
+    assert decision.status == "unknown"
+    assert "missing_evidence_reference" in decision.unmet_requirements
+
+
+def test_declared_families_do_not_establish_independent_sources() -> None:
+    items = tuple(
+        evidence(event_id=uuid4(), source_kind=source.kind)
+        for source in TRUSTED_FIXTURE_SOURCES
+    )
+    unattested = verify_claim(claim_for(items), items)
+    same_lineage = tuple(
+        source.model_copy(update={"independent_family": "one_collector"})
+        for source in TRUSTED_FIXTURE_SOURCES
+    )
+    mirrored = verify_claim(claim_for(items), items, trusted_sources=same_lineage)
+    assert unattested.status == mirrored.status == "unknown"
+    assert "untrusted_source" in unattested.unmet_requirements
+    assert "independent_source_families" in mirrored.unmet_requirements
+
+
+def test_separate_time_windows_do_not_corroborate_one_observation() -> None:
+    items = (
+        evidence(event_id=uuid4(), source_kind="kubernetes_audit"),
+        evidence(
+            event_id=uuid4(), source_kind="runtime_sensor",
+            observed_at=datetime(2026, 9, 28, 11, 3, tzinfo=UTC),
+        ),
+    )
+    decision = verify_claim(claim_for(items), items, trusted_sources=TRUSTED_FIXTURE_SOURCES)
+    assert decision.status == "unknown"
+    assert not decision.temporal_consistency
+
+
+def test_unknown_claim_can_be_reassessed_without_trusting_its_old_status() -> None:
+    items = tuple(
+        evidence(event_id=uuid4(), source_kind=source.kind)
+        for source in TRUSTED_FIXTURE_SOURCES
+    )
+    claim = claim_for(items).model_copy(update={"status": "unknown"})
+    first = verify_claim(claim, items, trusted_sources=TRUSTED_FIXTURE_SOURCES)
+    second = verify_claim(
+        claim.model_copy(update={"status": "verified"}), items,
+        trusted_sources=TRUSTED_FIXTURE_SOURCES,
+    )
+    assert first.status == second.status == "verified"
+
+
+@pytest.mark.parametrize("verifier", ["claim", "hypothesis"])
+def test_verifiers_reject_naive_clock_and_mutated_nested_payload(verifier) -> None:
+    item = evidence(event_id=uuid4(), source_kind="kubernetes_audit")
+    function = verify_claim if verifier == "claim" else verify_hypothesis
+    subject = claim_for((item,)) if verifier == "claim" else hypothesis(())
+    with pytest.raises(ValueError, match="timezone-aware"):
+        function(subject, [item], now=datetime(2026, 9, 28))
+    item.normalized["action"] = "tampered"
+    with pytest.raises(ValueError, match="content hash"):
+        function(subject, [item])
+
+
+@pytest.mark.parametrize("policy", [
+    {"minimum_independent_source_families": 1},
+    {"minimum_independent_source_families": True},
+    {"require_complete_coverage": False},
+])
+def test_minimum_verification_gates_cannot_be_weakened(policy) -> None:
+    with pytest.raises(ValueError):
+        VerificationPolicy(**policy)
