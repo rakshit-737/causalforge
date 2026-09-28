@@ -68,7 +68,7 @@
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 90 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 92 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -97,6 +97,8 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
 - Hypothesis verification is evidence-bound but currently evaluates already-collected evidence;
   no collector broker, durable planner, retry/deadline worker, or automatic contradiction matcher
   exists yet. Claim contradictions must currently be explicitly cited by a workflow caller.
+- API-submitted telemetry has no server-owned source attestation, so API claim verification remains
+  `unknown`; a trusted collector integration is required before the API can promote a claim.
 
 ## Next smallest task
 

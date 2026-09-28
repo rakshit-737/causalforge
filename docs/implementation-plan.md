@@ -70,8 +70,9 @@ ATT&CK/STIX ingestion and vector retrieval remain optional follow-up integration
 The local API now exposes tenant-verified event ingestion, incident lifecycle, evidence, claims,
 timeline, graph snapshots, durable hypotheses, and bounded verification attempts. It intentionally
 does not expose unverified model conclusions or response execution. Verification only returns
-`supported` after independent-source and coverage gates pass; otherwise it records
-`insufficient_evidence`.
+`insufficient_evidence` for free-text hypotheses until a semantic verifier exists. Direct observed
+claims can be verified only by a trusted worker that supplies server-owned source attestations,
+passes semantic event matching, and satisfies complete coverage and independence gates.
 
 ## Phase 5 — response safety
 
