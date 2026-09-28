@@ -45,13 +45,18 @@
   evidence, timeline, graph, and safe empty placeholders for future hypotheses/response plans.
 - Added API contract tests for missing principals, tenant isolation, redaction, tenant mismatch,
   and static route ordering.
+- Made evidence identifiers deterministic for a case/content pair so replay references remain
+  stable even when server receipt times differ.
+- Added the offline compromised-orders workload fixture, rule-only demo runner, deterministic
+  Markdown report, and regression test. It uses in-memory SQLite and never connects to a cluster,
+  credentials, an external network, or an LLM.
 
 ## Tests run
 
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 73 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 77 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -61,17 +66,10 @@ uv run --extra dev python -m bandit -q -r backend/causalforge
 uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
 ```
 
-Optional quality checks were not available in the current environment because `ruff` and `mypy`
-are not installed:
-
-```text
-ruff check backend
-mypy backend/causalforge
-```
-
 ## Known limitations
 
-- No durable worker, UI, or lab runtime exists yet.
+- No durable worker, UI, or browser UI exists yet; the current lab artifact is an offline Python
+  fixture and report, not a Kubernetes runtime.
 - Remote ATT&CK/STIX ingestion and vector retrieval are not implemented yet; local approved
   Markdown retrieval is deterministic and tenant-scoped.
 - PostgreSQL and Redis containers are declared but were not started in this environment because
@@ -82,7 +80,8 @@ mypy backend/causalforge
   ranking are not implemented.
 - The state transition function validates a proposed transition but does not yet persist lifecycle
   transitions through a coordinator.
-- Authentication, authorization middleware, and production secret management are not implemented.
+- The local principal adapter is a development identity check, not production authentication or
+  authorization middleware; production token verification and secret management remain open.
 
 ## Next smallest task
 

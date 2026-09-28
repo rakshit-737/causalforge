@@ -18,8 +18,9 @@ redaction and deduplication, an evidence ledger, a hash-chained audit log, tempo
 reachability utilities, a scoped Sigma subset, bounded event correlation, and a rule-only case
 engine, provider-neutral structured-output boundary, deterministic rule-only fallback,
 prompt-injection-safe context builder, tenant-scoped local knowledge retrieval, and a local
-principal-verified investigation API. The lab scenario, durable agent workflow, UI, and response
-execution remain later phases.
+principal-verified investigation API. It also includes a deterministic, offline compromised
+`orders-api` fixture and generated evidence-bound report. The durable agent workflow, UI, and
+response execution remain later phases.
 
 ## Design invariants
 
@@ -31,12 +32,17 @@ execution remain later phases.
 - Fixture mode must remain deterministic and require no LLM or external network.
 - Every important conclusion cites evidence IDs and exposes contradictions and unknowns.
 
-## Planned demo
+## Offline demo
 
-The first end-to-end demonstration will replay a synthetic compromised `orders-api` workload.
-It will show that secret enumeration and suspicious identity use are supported while successful
-secret exfiltration remains **unknown**, then compare a broad quarantine with a narrower RBAC and
-egress remediation in a counterfactual response simulation.
+Replay the synthetic workload without an LLM, Kubernetes, Docker, credentials, or external network:
+
+```text
+uv run --extra dev python scripts/demo.py --output reports/demo.md
+```
+
+The report shows secret enumeration, allowed and denied communication, a valid audit chain, and
+successful secret exfiltration explicitly marked **UNKNOWN / NOT ESTABLISHED**. Response simulation
+and human approval are intentionally not part of this offline fixture yet.
 
 ## Development status
 

@@ -1,4 +1,4 @@
-.PHONY: test run migrate lint typecheck security lock-check check
+.PHONY: test run migrate demo lint typecheck security lock-check check
 
 PYTHON ?= python
 
@@ -10,6 +10,9 @@ run:
 
 migrate:
 	$(PYTHON) -m alembic -c backend/alembic.ini upgrade head
+
+demo:
+	$(PYTHON) scripts/demo.py --output reports/demo.md
 
 lint:
 	$(PYTHON) -m ruff check backend
