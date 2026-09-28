@@ -55,6 +55,8 @@
   evidence counts, and unexpired deadlines; unsuccessful checks remain explicit
   `insufficient_evidence` outcomes.
 - Exposed tenant-scoped hypothesis creation/listing and durable verification-attempt API endpoints.
+- Added deterministic claim verification with explicit `verified`, `unknown`, and `disputed`
+  outcomes, durable attempt records, and API history endpoints.
 - Bound evidence integrity to the canonical event's tenant, source, parser, timestamps, coverage,
   and content hash before workflow evaluation.
 
@@ -63,7 +65,7 @@
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 85 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 90 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -90,8 +92,8 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
 - The local principal adapter is a development identity check, not production authentication or
   authorization middleware; production token verification and secret management remain open.
 - Hypothesis verification is evidence-bound but currently evaluates already-collected evidence;
-  no collector broker, durable planner, retry/deadline worker, contradiction matcher, or claim
-  promotion coordinator exists yet.
+  no collector broker, durable planner, retry/deadline worker, or automatic contradiction matcher
+  exists yet. Claim contradictions must currently be explicitly cited by a workflow caller.
 
 ## Next smallest task
 

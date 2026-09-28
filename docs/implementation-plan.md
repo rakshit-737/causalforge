@@ -59,7 +59,7 @@ ATT&CK/STIX ingestion and vector retrieval remain optional follow-up integration
 
 ## Phase 4 - investigation workflow
 
-**Status: durable hypothesis/verifier checkpoint complete; planner/collector/coordinator remain.**
+**Status: durable hypothesis/claim verifier checkpoint complete; planner/collector/coordinator remain.**
 
 - Add durable coordinator, competing hypotheses, active evidence planning, typed tool broker,
   collector, verifier, risk assessor, and report composer.

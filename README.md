@@ -21,7 +21,8 @@ prompt-injection-safe context builder, tenant-scoped local knowledge retrieval, 
 principal-verified investigation API. It also includes a deterministic, offline compromised
 `orders-api` fixture and generated evidence-bound report. The durable agent workflow, UI, and
 bounded hypothesis verifier are present; collector planning, UI, and response execution remain
-later phases.
+later phases. Claims can also be deterministically promoted to `verified`, or remain `unknown`/
+`disputed`, through explicit evidence gates.
 
 ## Design invariants
 

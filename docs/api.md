@@ -52,6 +52,8 @@ POST /api/v1/incidents/{incident_id}/hypotheses
 GET  /api/v1/incidents/{incident_id}/hypotheses
 POST /api/v1/incidents/{incident_id}/hypotheses/{hypothesis_id}/verify
 GET  /api/v1/incidents/{incident_id}/hypotheses/{hypothesis_id}/verifications
+POST /api/v1/incidents/{incident_id}/claims/{claim_id}/verify
+GET  /api/v1/incidents/{incident_id}/claims/{claim_id}/verifications
 ```
 
 Claims expose evidence IDs and explicit states. The current API does not promote claims to
@@ -60,6 +62,10 @@ verification request evaluates integrity-checked case evidence. Verification req
 independent source families and complete coverage by default; deadline or evidence-budget failures
 return explicit `insufficient_evidence` rather than best-effort support. Each attempt is persisted
 with its evidence IDs, source families, policy, and unmet requirements.
+
+Claim verification uses the same gates and additionally gives explicit contradictory evidence
+precedence: a cited contradiction produces `disputed`, insufficient support produces `unknown`,
+and only independent complete support produces `verified`.
 
 ## Example local flow
 
