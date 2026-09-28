@@ -34,11 +34,16 @@ def headers(tenant_id: UUID, user: str) -> dict[str, str]:
     return {"X-Tenant-ID": str(tenant_id), "X-User-ID": user}
 
 
-def event_payload(tenant_id: UUID, event_id: UUID | None = None) -> dict[str, object]:
+def event_payload(
+    tenant_id: UUID,
+    event_id: UUID | None = None,
+    *,
+    source_kind: str = "kubernetes_audit",
+) -> dict[str, object]:
     return {
         "event_id": str(event_id or uuid4()),
         "tenant_id": str(tenant_id),
-        "source": {"kind": "kubernetes_audit", "name": "fixture", "version": "1.0"},
+        "source": {"kind": source_kind, "name": "fixture", "version": "1.0"},
         "observed_at": "2026-09-28T10:03:00Z",
         "actor": {"kind": "service_account", "id": "system:serviceaccount:orders:reader"},
         "action": "list",
@@ -150,3 +155,133 @@ def test_api_static_incident_routes_are_not_captured_by_id_route(tmp_path) -> No
     graph = client.get(f"/api/v1/incidents/{case_id}/graph", headers=auth_a)
     assert claims.status_code == 200
     assert graph.status_code == 200
+
+
+def test_api_persists_and_verifies_hypothesis_with_independent_sources(tmp_path) -> None:
+    client, tenant_a, _ = make_client(tmp_path)
+    auth_a = headers(tenant_a, "alice")
+    case_id = uuid4()
+    first_event_id = uuid4()
+    second_event_id = uuid4()
+
+    created = client.post(
+        "/api/v1/incidents",
+        headers=auth_a,
+        json={"incident_id": str(case_id), "title": "Hypothesis fixture"},
+    )
+    assert created.status_code == 201
+    batch = client.post(
+        "/api/v1/events/batch",
+        headers=auth_a,
+        json={
+            "case_id": str(case_id),
+            "parser_version": "fixture-1.0",
+            "events": [
+                event_payload(tenant_a, first_event_id),
+                event_payload(tenant_a, second_event_id, source_kind="runtime_sensor"),
+            ],
+        },
+    )
+    assert batch.status_code == 201
+
+    hypothesis = client.post(
+        f"/api/v1/incidents/{case_id}/hypotheses",
+        headers=auth_a,
+        json={
+            "statement": "orders-reader enumerated Kubernetes secrets",
+            "supporting_observation_ids": [str(first_event_id), str(second_event_id)],
+            "required_evidence": ["independent source", "complete coverage"],
+            "disconfirming_evidence": ["audit denial"],
+            "attack_technique_ids": ["T1552.007"],
+            "initial_confidence": 0.6,
+            "risk_if_true": {
+                "severity": "high",
+                "rationale": "secret material may be exposed",
+            },
+        },
+    )
+    assert hypothesis.status_code == 201
+    assert hypothesis.json()["status"] == "proposed"
+    hypothesis_id = hypothesis.json()["hypothesis_id"]
+
+    verified = client.post(
+        f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/verify",
+        headers=auth_a,
+        json={"minimum_independent_source_families": 2},
+    )
+    assert verified.status_code == 201
+    assert verified.json()["status"] == "supported"
+    assert verified.json()["source_families"] == ["kubernetes_audit", "runtime_sensor"]
+
+    listed = client.get(f"/api/v1/incidents/{case_id}/hypotheses", headers=auth_a)
+    attempts = client.get(
+        f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/verifications",
+        headers=auth_a,
+    )
+    assert listed.status_code == 200
+    assert listed.json()[0]["status"] == "supported"
+    assert attempts.status_code == 200
+    assert len(attempts.json()) == 1
+
+
+def test_api_returns_insufficient_evidence_without_independent_coverage(tmp_path) -> None:
+    client, tenant_a, _ = make_client(tmp_path)
+    auth_a = headers(tenant_a, "alice")
+    case_id = uuid4()
+    event_id = uuid4()
+    created = client.post(
+        "/api/v1/incidents",
+        headers=auth_a,
+        json={"incident_id": str(case_id), "title": "Insufficient fixture"},
+    )
+    assert created.status_code == 201
+    assert (
+        client.post(
+            "/api/v1/events/batch",
+            headers=auth_a,
+            json={
+                "case_id": str(case_id),
+                "parser_version": "fixture-1.0",
+                "events": [event_payload(tenant_a, event_id)],
+            },
+        ).status_code
+        == 201
+    )
+    hypothesis = client.post(
+        f"/api/v1/incidents/{case_id}/hypotheses",
+        headers=auth_a,
+        json={
+            "statement": "one source proves secret exfiltration",
+            "supporting_observation_ids": [str(event_id)],
+            "initial_confidence": 0.9,
+            "risk_if_true": {"severity": "critical", "rationale": "high impact"},
+        },
+    )
+    hypothesis_id = hypothesis.json()["hypothesis_id"]
+    verified = client.post(
+        f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/verify",
+        headers=auth_a,
+        json={},
+    )
+
+    assert verified.status_code == 201
+    assert verified.json()["status"] == "insufficient_evidence"
+    assert "independent_source_families" in verified.json()["unmet_requirements"]
+
+
+def test_api_does_not_reveal_foreign_incident_id_on_create(tmp_path) -> None:
+    client, tenant_a, tenant_b = make_client(tmp_path)
+    case_id = uuid4()
+    assert client.post(
+        "/api/v1/incidents",
+        headers=headers(tenant_a, "alice"),
+        json={"incident_id": str(case_id), "title": "Tenant A"},
+    ).status_code == 201
+
+    response = client.post(
+        "/api/v1/incidents",
+        headers=headers(tenant_b, "bob"),
+        json={"incident_id": str(case_id), "title": "Tenant B"},
+    )
+
+    assert response.status_code == 404

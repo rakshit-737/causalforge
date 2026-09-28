@@ -1,7 +1,7 @@
 """Tenant-scoped incident, evidence, claim, timeline, and graph endpoints."""
 
 from typing import Annotated, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,16 +15,28 @@ from causalforge.api.schemas import (
     ClaimResponse,
     EvidenceResponse,
     GraphResponse,
+    HypothesisCreateRequest,
+    HypothesisResponse,
     IncidentResponse,
     InvestigationRequest,
     InvestigationResponse,
+    VerificationRequest,
+    VerificationResponse,
 )
 from causalforge.domain.events import CanonicalEvent
+from causalforge.domain.hypotheses import Hypothesis
 from causalforge.graph.projector import TemporalAttackGraph
 from causalforge.security.engine import DeterministicCaseEngine
 from causalforge.storage.db import Database
-from causalforge.storage.models import ClaimRecord, EvidenceRecord, IncidentRecord
+from causalforge.storage.models import (
+    ClaimRecord,
+    EvidenceRecord,
+    HypothesisRecord,
+    IncidentRecord,
+    VerificationRecord,
+)
 from causalforge.storage.repositories.evidence import EvidenceRepository
+from causalforge.workflow.verifier import VerificationPolicy, verify_hypothesis
 
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents"])
 
@@ -95,6 +107,55 @@ def _evidence_response(record: EvidenceRecord) -> EvidenceResponse:
     )
 
 
+def _hypothesis_response(record: HypothesisRecord) -> HypothesisResponse:
+    hypothesis = record.to_hypothesis()
+    return HypothesisResponse(
+        hypothesis_id=hypothesis.hypothesis_id,
+        case_id=hypothesis.case_id,
+        tenant_id=hypothesis.tenant_id,
+        statement=hypothesis.statement,
+        supporting_observation_ids=list(hypothesis.supporting_observation_ids),
+        required_evidence=list(hypothesis.required_evidence),
+        disconfirming_evidence=list(hypothesis.disconfirming_evidence),
+        attack_technique_ids=list(hypothesis.attack_technique_ids),
+        initial_confidence=hypothesis.initial_confidence,
+        risk_if_true=hypothesis.risk_if_true,
+        status=hypothesis.status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        version=record.version,
+    )
+
+
+def _verification_response(record: VerificationRecord) -> VerificationResponse:
+    return VerificationResponse(
+        verification_id=UUID(record.id),
+        hypothesis_id=UUID(record.hypothesis_id),
+        status=record.status,
+        supporting_evidence_ids=[UUID(value) for value in record.supporting_evidence_ids],
+        source_families=list(record.source_families),
+        coverage_sufficient=record.coverage_sufficient,
+        temporal_consistency=record.temporal_consistency,
+        unmet_requirements=list(record.unmet_requirements),
+        reason=record.reason,
+        checked_at=record.checked_at,
+        consumed_evidence_items=record.consumed_evidence_items,
+        budget_exhausted=record.budget_exhausted,
+    )
+
+
+def _get_hypothesis(
+    session: Session, *, tenant_id: UUID, incident_id: UUID, hypothesis_id: UUID
+) -> HypothesisRecord | None:
+    return session.scalar(
+        select(HypothesisRecord).where(
+            HypothesisRecord.id == str(hypothesis_id),
+            HypothesisRecord.tenant_id == str(tenant_id),
+            HypothesisRecord.incident_id == str(incident_id),
+        )
+    )
+
+
 @router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
 def create_incident(
     request: IncidentCreateRequest,
@@ -108,9 +169,9 @@ def create_incident(
 
     incident_id = request.incident_id or uuid4()
     with database.session() as session:
-        existing = _get_incident(
-            session, tenant_id=principal.tenant_id, incident_id=incident_id
-        )
+        existing = session.get(IncidentRecord, str(incident_id))
+        if existing is not None and existing.tenant_id != str(principal.tenant_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident not found")
         if existing is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -225,6 +286,209 @@ def list_evidence(
     return [_evidence_response(row) for row in rows]
 
 
+@router.post(
+    "/{incident_id}/hypotheses",
+    response_model=HypothesisResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_hypothesis(
+    incident_id: UUID,
+    request: HypothesisCreateRequest,
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Database, Depends(get_database)],
+    engine: Annotated[DeterministicCaseEngine, Depends(get_case_engine)],
+) -> HypothesisResponse:
+    """Persist a proposed explanation; verification is a separate bounded operation."""
+
+    hypothesis_id = request.hypothesis_id or uuid4()
+    with database.session() as session:
+        if _get_incident(
+            session, tenant_id=principal.tenant_id, incident_id=incident_id
+        ) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident not found")
+        if session.get(HypothesisRecord, str(hypothesis_id)) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="hypothesis already exists",
+            )
+        hypothesis = Hypothesis(
+            schema_version="1.0",
+            hypothesis_id=hypothesis_id,
+            case_id=incident_id,
+            tenant_id=principal.tenant_id,
+            statement=request.statement,
+            supporting_observation_ids=tuple(request.supporting_observation_ids),
+            required_evidence=tuple(request.required_evidence),
+            disconfirming_evidence=tuple(request.disconfirming_evidence),
+            attack_technique_ids=tuple(request.attack_technique_ids),
+            initial_confidence=request.initial_confidence,
+            risk_if_true=request.risk_if_true,
+            status="proposed",
+        )
+        record = HypothesisRecord.from_hypothesis(hypothesis)
+        session.add(record)
+        session.flush()
+        engine.audit.append(
+            session,
+            tenant_id=principal.tenant_id,
+            case_id=incident_id,
+            actor=principal.audit_actor,
+            event_type="hypothesis.created",
+            payload={
+                "hypothesis_id": record.id,
+                "status": record.status,
+                "supporting_observation_count": len(record.supporting_observation_ids),
+            },
+            policy_decision="allow",
+        )
+        session.commit()
+        return _hypothesis_response(record)
+
+
+@router.get("/{incident_id}/hypotheses", response_model=list[HypothesisResponse])
+def list_hypotheses(
+    incident_id: UUID,
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Database, Depends(get_database)],
+) -> list[HypothesisResponse]:
+    with database.session() as session:
+        if _get_incident(
+            session, tenant_id=principal.tenant_id, incident_id=incident_id
+        ) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident not found")
+        rows = list(
+            session.scalars(
+                select(HypothesisRecord)
+                .where(
+                    HypothesisRecord.tenant_id == str(principal.tenant_id),
+                    HypothesisRecord.incident_id == str(incident_id),
+                )
+                .order_by(HypothesisRecord.created_at.asc())
+            )
+        )
+    return [_hypothesis_response(row) for row in rows]
+
+
+@router.post(
+    "/{incident_id}/hypotheses/{hypothesis_id}/verify",
+    response_model=VerificationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def verify_incident_hypothesis(
+    incident_id: UUID,
+    hypothesis_id: UUID,
+    request: VerificationRequest,
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Database, Depends(get_database)],
+    engine: Annotated[DeterministicCaseEngine, Depends(get_case_engine)],
+) -> VerificationResponse:
+    """Verify one hypothesis against all integrity-checked evidence already in the case."""
+
+    policy = VerificationPolicy.model_validate(request.model_dump())
+    with database.session() as session:
+        if _get_incident(
+            session, tenant_id=principal.tenant_id, incident_id=incident_id
+        ) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident not found")
+        hypothesis_record = _get_hypothesis(
+            session,
+            tenant_id=principal.tenant_id,
+            incident_id=incident_id,
+            hypothesis_id=hypothesis_id,
+        )
+        if hypothesis_record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="hypothesis not found"
+            )
+        evidence_rows = list(
+            session.scalars(
+                select(EvidenceRecord)
+                .where(
+                    EvidenceRecord.tenant_id == str(principal.tenant_id),
+                    EvidenceRecord.case_id == str(incident_id),
+                )
+                .order_by(EvidenceRecord.observed_at.asc(), EvidenceRecord.id.asc())
+            )
+        )
+        try:
+            decision = verify_hypothesis(
+                hypothesis_record.to_hypothesis(),
+                tuple(EvidenceRepository.to_domain(row) for row in evidence_rows),
+                policy=policy,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="evidence verification failed integrity checks",
+            ) from exc
+
+        verification = VerificationRecord.from_decision(
+            decision,
+            tenant_id=principal.tenant_id,
+            case_id=incident_id,
+            policy=policy,
+        )
+        session.add(verification)
+        hypothesis_record.status = decision.status
+        hypothesis_record.updated_at = decision.checked_at
+        hypothesis_record.version += 1
+        session.flush()
+        engine.audit.append(
+            session,
+            tenant_id=principal.tenant_id,
+            case_id=incident_id,
+            actor=principal.audit_actor,
+            event_type="hypothesis.verified",
+            payload={
+                "hypothesis_id": str(hypothesis_id),
+                "verification_id": verification.id,
+                "status": decision.status,
+                "supporting_evidence_ids": [
+                    str(value) for value in decision.supporting_evidence_ids
+                ],
+                "unmet_requirements": list(decision.unmet_requirements),
+            },
+            policy_decision="allow",
+            created_at=decision.checked_at,
+        )
+        session.commit()
+        return _verification_response(verification)
+
+
+@router.get(
+    "/{incident_id}/hypotheses/{hypothesis_id}/verifications",
+    response_model=list[VerificationResponse],
+)
+def list_hypothesis_verifications(
+    incident_id: UUID,
+    hypothesis_id: UUID,
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Database, Depends(get_database)],
+) -> list[VerificationResponse]:
+    with database.session() as session:
+        if _get_hypothesis(
+            session,
+            tenant_id=principal.tenant_id,
+            incident_id=incident_id,
+            hypothesis_id=hypothesis_id,
+        ) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="hypothesis not found"
+            )
+        rows = list(
+            session.scalars(
+                select(VerificationRecord)
+                .where(
+                    VerificationRecord.tenant_id == str(principal.tenant_id),
+                    VerificationRecord.incident_id == str(incident_id),
+                    VerificationRecord.hypothesis_id == str(hypothesis_id),
+                )
+                .order_by(VerificationRecord.checked_at.desc())
+            )
+        )
+    return [_verification_response(row) for row in rows]
+
+
 @router.get("/{incident_id}/timeline", response_model=list[EvidenceResponse])
 def timeline(
     incident_id: UUID,
@@ -232,20 +496,6 @@ def timeline(
     database: Annotated[Database, Depends(get_database)],
 ) -> list[EvidenceResponse]:
     return list_evidence(incident_id, principal, database)
-
-
-@router.get("/{incident_id}/hypotheses", response_model=list[dict[str, Any]])
-def hypotheses(
-    incident_id: UUID,
-    principal: Annotated[Principal, Depends(get_principal)],
-    database: Annotated[Database, Depends(get_database)],
-) -> list[dict[str, Any]]:
-    with database.session() as session:
-        if _get_incident(
-            session, tenant_id=principal.tenant_id, incident_id=incident_id
-        ) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident not found")
-    return []
 
 
 @router.get("/{incident_id}/graph", response_model=GraphResponse)

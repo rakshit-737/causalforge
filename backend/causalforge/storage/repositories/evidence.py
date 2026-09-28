@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from causalforge.domain.events import CanonicalEvent
+from causalforge.domain.events import CanonicalEvent, Coverage, SourceRef
 from causalforge.domain.evidence import EvidenceItem
 from causalforge.storage.models.evidence import EvidenceRecord
 
@@ -65,3 +65,34 @@ class EvidenceRepository:
             or event.coverage.window_end != record.coverage_window_end
         ):
             raise ValueError("evidence provenance metadata mismatch")
+
+    @staticmethod
+    def to_domain(record: EvidenceRecord) -> EvidenceItem:
+        """Verify and rehydrate an immutable persistence row for workflow evaluation."""
+
+        EvidenceRepository.verify_integrity(record)
+        return EvidenceItem(
+            schema_version="1.0",
+            evidence_id=UUID(record.id),
+            case_id=UUID(record.case_id),
+            tenant_id=UUID(record.tenant_id),
+            source=SourceRef(
+                kind=record.source_kind,
+                name=record.source_name,
+                version=record.source_version,
+            ),
+            observed_at=record.observed_at,
+            collected_at=record.collected_at,
+            parser_version=record.parser_version,
+            content_hash=record.content_hash,
+            redaction_profile=record.redaction_profile,
+            coverage=Coverage(
+                source_complete_for_window=record.coverage_complete,
+                window_start=record.coverage_window_start,
+                window_end=record.coverage_window_end,
+            ),
+            normalized=record.normalized,
+            raw_reference=record.raw_reference,
+            source_reliability=record.source_reliability,
+            source_family=record.source_family,
+        )
