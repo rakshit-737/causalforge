@@ -61,15 +61,19 @@
 - Hardened verification so independent source families must be server-attested, observed claim
   semantics must match the canonical event, and free-text hypotheses remain
   `insufficient_evidence` until a semantic verifier evaluates required/disconfirming evidence.
+- Added strict claim gates for successful outcomes, source reliability, temporal span, citation
+  completeness, and immutable nested-payload validation.
 - Bound evidence integrity to the canonical event's tenant, source, parser, timestamps, coverage,
   content hash, and complete provenance-envelope hash before workflow evaluation (`0009`).
+- Confined the development principal adapter to direct loopback requests without forwarding headers;
+  added real SQLite rollback/savepoint and concurrent-writer regression coverage.
 
 ## Tests run
 
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 92 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 109 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
