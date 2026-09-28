@@ -4,7 +4,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from causalforge.api.routes_events import router as events_router
 from causalforge.api.routes_health import router as health_router
@@ -46,6 +48,19 @@ def create_app(
         debug=runtime_settings.debug,
         lifespan=lifespan,
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def safe_validation_error(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Never echo unredacted request bodies from boundary validation errors."""
+
+        del request, exc
+        return JSONResponse(
+            status_code=422,
+            content={"code": "validation_error", "detail": "request validation failed"},
+        )
+
     app.state.settings = runtime_settings
     rules_dir = Path(__file__).resolve().parents[2] / "rules" / "sigma"
     app.state.case_engine = case_engine or DeterministicCaseEngine(rules=load_rules(rules_dir))

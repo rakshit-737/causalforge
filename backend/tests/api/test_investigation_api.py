@@ -285,3 +285,29 @@ def test_api_does_not_reveal_foreign_incident_id_on_create(tmp_path) -> None:
     )
 
     assert response.status_code == 404
+
+
+def test_api_validation_errors_do_not_echo_unredacted_request_bodies(tmp_path) -> None:
+    client, tenant_a, _ = make_client(tmp_path)
+    response = client.post(
+        "/api/v1/events/batch",
+        headers=headers(tenant_a, "alice"),
+        json={
+            "case_id": str(uuid4()),
+            "parser_version": "fixture-1.0",
+            "events": [
+                {
+                    **event_payload(tenant_a),
+                    "attributes": {"password": "validation-secret-must-not-echo"},
+                }
+                for _ in range(101)
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "code": "validation_error",
+        "detail": "request validation failed",
+    }
+    assert "validation-secret-must-not-echo" not in response.text
