@@ -19,7 +19,13 @@ class Database:
 
     def __init__(self, url: str, *, echo: bool = False) -> None:
         self.url = url
-        self.engine: Engine = create_engine(url, echo=echo, future=True)
+        connect_args = {"timeout": 30.0} if url.startswith("sqlite") else {}
+        self.engine: Engine = create_engine(
+            url,
+            echo=echo,
+            future=True,
+            connect_args=connect_args,
+        )
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_schema(self) -> None:
@@ -44,6 +50,12 @@ class Database:
         """Yield one caller-owned session and roll back uncommitted failures."""
 
         session = self.session_factory()
+        session.begin()
+        if self.engine.dialect.name == "sqlite":
+            # Python's sqlite driver otherwise starts a transaction at the first SAVEPOINT and
+            # releasing that outermost savepoint commits it. Force a real outer transaction so
+            # repository savepoints remain rollback-safe.
+            session.connection().exec_driver_sql("BEGIN IMMEDIATE")
         try:
             yield session
         except Exception:

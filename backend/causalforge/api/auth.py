@@ -6,6 +6,7 @@ against the local tenant/user tables. The self-asserted tenant header alone is n
 """
 
 from dataclasses import dataclass
+from ipaddress import ip_address
 from typing import Annotated
 from uuid import UUID
 
@@ -13,12 +14,12 @@ from fastapi import Header, HTTPException, Request, status
 from sqlalchemy import select
 
 from causalforge.storage.db import Database
-from causalforge.storage.models import User
+from causalforge.storage.models import Tenant, User
 
 
 @dataclass(frozen=True)
 class Principal:
-    """Authenticated local principal and immutable tenant scope."""
+    """Registered development identity, not a cryptographically authenticated principal."""
 
     tenant_id: UUID
     user_id: UUID
@@ -39,6 +40,20 @@ def get_principal(
 ) -> Principal:
     """Verify the local tenant/user pair before any tenant-scoped API operation."""
 
+    try:
+        peer = ip_address(request.client.host) if request.client is not None else None
+    except ValueError:
+        peer = None
+    if (
+        peer is None
+        or not peer.is_loopback
+        or request.url.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or any(name in request.headers for name in ("Forwarded", "X-Forwarded-For"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="development identity is restricted to direct loopback requests",
+        )
     if not tenant_header or not user_header:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -55,19 +70,22 @@ def get_principal(
     database: Database = request.app.state.database
     with database.session() as session:
         user = session.scalar(
-            select(User).where(
+            select(User).join(Tenant, User.tenant_id == Tenant.id).where(
                 User.tenant_id == str(tenant_id),
                 User.subject == user_header,
             )
         )
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="invalid local principal",
-        )
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid local principal",
+            )
+        user_id = user.id
+        subject = user.subject
+        role = user.role
     return Principal(
         tenant_id=tenant_id,
-        user_id=UUID(user.id),
-        subject=user.subject,
-        role=user.role,
+        user_id=UUID(user_id),
+        subject=subject,
+        role=role,
     )

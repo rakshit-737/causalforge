@@ -7,7 +7,8 @@ from causalforge.main import create_app
 from causalforge.storage.models import Tenant, User
 
 
-def make_client(tmp_path):
+def make_client(tmp_path, *, peer="127.0.0.1", host="127.0.0.1"):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     settings = Settings(
         environment="test",
         database_url=f"sqlite:///{tmp_path / 'api.db'}",
@@ -27,7 +28,10 @@ def make_client(tmp_path):
             ]
         )
         session.commit()
-    return TestClient(app), UUID(tenant_a.id), UUID(tenant_b.id)
+    return (
+        TestClient(app, base_url=f"http://{host}", client=(peer, 50000)),
+        UUID(tenant_a.id), UUID(tenant_b.id),
+    )
 
 
 def headers(tenant_id: UUID, user: str) -> dict[str, str]:
@@ -67,9 +71,25 @@ def test_api_requires_verified_local_principal(tmp_path) -> None:
     response = client.get("/api/v1/incidents")
     assert response.status_code == 401
 
-    response = client.get(
+
+def test_api_rejects_remote_or_forwarded_development_identity(tmp_path) -> None:
+    remote_client, tenant_a, _ = make_client(tmp_path, peer="10.0.0.8")
+    response = remote_client.get(
+        "/api/v1/incidents", headers=headers(tenant_a, "alice")
+    )
+    assert response.status_code == 403
+
+    local_client, tenant_a, _ = make_client(tmp_path / "forwarded", peer="127.0.0.1")
+    response = local_client.get(
         "/api/v1/incidents",
-        headers={"X-Tenant-ID": str(tenant_a), "X-User-ID": "not-a-user"},
+        headers={**headers(tenant_a, "alice"), "X-Forwarded-For": "10.0.0.8"},
+    )
+    assert response.status_code == 403
+
+    invalid_client, invalid_tenant, _ = make_client(tmp_path / "invalid")
+    response = invalid_client.get(
+        "/api/v1/incidents",
+        headers={"X-Tenant-ID": str(invalid_tenant), "X-User-ID": "not-a-user"},
     )
     assert response.status_code == 401
 
