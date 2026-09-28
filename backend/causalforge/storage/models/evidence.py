@@ -33,6 +33,7 @@ class EvidenceRecord(Base):
     collected_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     parser_version: Mapped[str] = mapped_column(String(120), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    provenance_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     redaction_profile: Mapped[str] = mapped_column(String(120), nullable=False)
     coverage_complete: Mapped[bool] = mapped_column(Boolean, nullable=False)
     coverage_window_start: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -57,6 +58,7 @@ class EvidenceRecord(Base):
             collected_at=evidence.collected_at,
             parser_version=evidence.parser_version,
             content_hash=evidence.content_hash,
+            provenance_hash=evidence.provenance_hash,
             redaction_profile=evidence.redaction_profile,
             coverage_complete=evidence.coverage.source_complete_for_window,
             coverage_window_start=evidence.coverage.window_start,

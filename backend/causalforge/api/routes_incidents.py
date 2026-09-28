@@ -102,6 +102,7 @@ def _evidence_response(record: EvidenceRecord) -> EvidenceResponse:
         observed_at=record.observed_at,
         collected_at=record.collected_at,
         content_hash=record.content_hash,
+        provenance_hash=record.provenance_hash,
         redaction_profile=record.redaction_profile,
         normalized=record.normalized,
         source_reliability=record.source_reliability,

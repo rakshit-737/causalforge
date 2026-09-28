@@ -79,6 +79,31 @@ class EvidenceRepository:
             or event.coverage.window_end != record.coverage_window_end
         ):
             raise ValueError("evidence provenance metadata mismatch")
+        expected_provenance_hash = EvidenceItem.provenance_hash_for(
+            evidence_id=UUID(record.id),
+            case_id=UUID(record.case_id),
+            tenant_id=UUID(record.tenant_id),
+            source=SourceRef(
+                kind=record.source_kind,
+                name=record.source_name,
+                version=record.source_version,
+            ),
+            observed_at=record.observed_at,
+            collected_at=record.collected_at,
+            parser_version=record.parser_version,
+            content_hash=record.content_hash,
+            redaction_profile=record.redaction_profile,
+            coverage=Coverage(
+                source_complete_for_window=record.coverage_complete,
+                window_start=record.coverage_window_start,
+                window_end=record.coverage_window_end,
+            ),
+            raw_reference=record.raw_reference,
+            source_reliability=record.source_reliability,
+            source_family=record.source_family,
+        )
+        if expected_provenance_hash != record.provenance_hash:
+            raise ValueError("evidence provenance hash mismatch")
 
     @staticmethod
     def to_domain(record: EvidenceRecord) -> EvidenceItem:
@@ -99,6 +124,7 @@ class EvidenceRepository:
             collected_at=record.collected_at,
             parser_version=record.parser_version,
             content_hash=record.content_hash,
+            provenance_hash=record.provenance_hash,
             redaction_profile=record.redaction_profile,
             coverage=Coverage(
                 source_complete_for_window=record.coverage_complete,

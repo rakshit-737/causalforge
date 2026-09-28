@@ -69,6 +69,7 @@ def valid_instances() -> dict[str, dict[str, object]]:
             "collected_at": "2026-09-27T10:03:01Z",
             "parser_version": "test-1.0",
             "content_hash": sha(),
+            "provenance_hash": sha(),
             "redaction_profile": "fixture-default",
             "coverage": coverage,
             "normalized": {"action": "list"},

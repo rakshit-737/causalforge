@@ -8,7 +8,7 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
-SCHEMA_REVISION = "0008_claim_verification"
+SCHEMA_REVISION = "0009_evidence_provenance"
 
 
 class UTCDateTime(TypeDecorator[datetime]):

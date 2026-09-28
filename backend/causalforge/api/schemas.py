@@ -71,6 +71,7 @@ class EvidenceResponse(BaseModel):
     observed_at: datetime
     collected_at: datetime
     content_hash: str
+    provenance_hash: str
     redaction_profile: str
     normalized: dict[str, Any]
     source_reliability: float
