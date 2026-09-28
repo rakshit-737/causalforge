@@ -50,7 +50,8 @@
 - Added the offline compromised-orders workload fixture, rule-only demo runner, deterministic
   Markdown report, and regression test. It uses in-memory SQLite and never connects to a cluster,
   credentials, an external network, or an LLM.
-- Added durable hypothesis and verification-record tables with Alembic migration `0007`.
+- Added durable hypothesis and verification-record tables with Alembic migrations `0007` and
+  `0008`.
 - Added a fail-closed verifier requiring independent source families, complete coverage, bounded
   evidence counts, and unexpired deadlines; unsuccessful checks remain explicit
   `insufficient_evidence` outcomes.
@@ -61,7 +62,7 @@
   semantics must match the canonical event, and free-text hypotheses remain
   `insufficient_evidence` until a semantic verifier evaluates required/disconfirming evidence.
 - Bound evidence integrity to the canonical event's tenant, source, parser, timestamps, coverage,
-  and content hash before workflow evaluation.
+  content hash, and complete provenance-envelope hash before workflow evaluation (`0009`).
 
 ## Tests run
 
@@ -102,8 +103,9 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
 
 ## Next smallest task
 
-Implement durable investigation workflow artifacts: competing hypotheses, evidence planning,
-claim verification with source independence/coverage rules, deadlines, budgets, and explicit
+Implement the trusted collector/broker and semantic verifier boundary: server-owned source
+attestations, typed read-only collection, evidence planning, contradiction discovery, and a
+coordinator that can promote only narrowly supported observed claims while preserving explicit
 `INSUFFICIENT_EVIDENCE` outcomes.
 
 ## Architectural constraints carried forward
