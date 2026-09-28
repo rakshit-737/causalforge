@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Literal
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -51,16 +51,18 @@ class EvidenceItem(BaseModel):
         evidence_id: UUID | None = None,
     ) -> "EvidenceItem":
         normalized = event.canonical_payload()
+        content_hash = cls.content_hash_for(normalized)
         return cls(
             schema_version="1.0",
-            evidence_id=evidence_id or uuid4(),
+            evidence_id=evidence_id
+            or uuid5(NAMESPACE_URL, f"causalforge:evidence:{case_id}:{content_hash}"),
             case_id=case_id,
             tenant_id=event.tenant_id,
             source=event.source,
             observed_at=event.observed_at,
             collected_at=collected_at,
             parser_version=event.parser_version,
-            content_hash=cls.content_hash_for(normalized),
+            content_hash=content_hash,
             redaction_profile=redaction_profile,
             coverage=event.coverage,
             normalized=normalized,

@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 
+from causalforge.domain.evidence import EvidenceItem
 from causalforge.domain.serialization import sha256_hex
 from causalforge.ingestion.deduplication import Deduplicator
 from causalforge.ingestion.normalizer import NormalizationError, normalize_event
@@ -111,3 +112,38 @@ def test_redaction_covers_camel_case_headers_and_bearer_values() -> None:
     assert attributes["DB_PASSWORD"] == "[REDACTED]"
     assert attributes["headers"]["Cookie"] == "[REDACTED]"
     assert "abcdefghijklmnop" not in attributes["message"]
+
+
+def test_evidence_identity_is_stable_across_replay_receipt_times() -> None:
+    case_id = uuid4()
+    event_payload = payload("00000000-0000-0000-0000-000000000001")
+    first_event = normalize_event(
+        event_payload,
+        parser_version="fixture-1.0",
+        clock=lambda: datetime(2026, 9, 28, 10, 3, 1, tzinfo=UTC),
+    ).event
+    second_event = normalize_event(
+        event_payload,
+        parser_version="fixture-1.0",
+        clock=lambda: datetime(2026, 9, 28, 10, 4, 1, tzinfo=UTC),
+    ).event
+
+    first = EvidenceItem.from_event(
+        first_event,
+        case_id=case_id,
+        collected_at=first_event.ingested_at,
+        redaction_profile="default-v1",
+        source_reliability=1.0,
+        source_family="kubernetes_audit",
+    )
+    second = EvidenceItem.from_event(
+        second_event,
+        case_id=case_id,
+        collected_at=second_event.ingested_at,
+        redaction_profile="default-v1",
+        source_reliability=1.0,
+        source_family="kubernetes_audit",
+    )
+
+    assert first.content_hash == second.content_hash
+    assert first.evidence_id == second.evidence_id
