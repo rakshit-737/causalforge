@@ -108,6 +108,29 @@ def test_api_enforces_tenant_isolation_and_redacted_event_reads(tmp_path) -> Non
     claims = client.get(f"/api/v1/incidents/{case_id}/claims", headers=auth_a)
     assert claims.status_code == 200
     assert claims.json()[0]["status"] == "observed"
+    claim_id = claims.json()[0]["claim_id"]
+
+    unknown_claim = client.post(
+        f"/api/v1/incidents/{case_id}/claims/{claim_id}/verify",
+        headers=auth_a,
+        json={},
+    )
+    assert unknown_claim.status_code == 201
+    assert unknown_claim.json()["status"] == "unknown"
+
+    verified_claim = client.post(
+        f"/api/v1/incidents/{case_id}/claims/{claim_id}/verify",
+        headers=auth_a,
+        json={"minimum_independent_source_families": 1},
+    )
+    assert verified_claim.status_code == 201
+    assert verified_claim.json()["status"] == "verified"
+    claim_attempts = client.get(
+        f"/api/v1/incidents/{case_id}/claims/{claim_id}/verifications",
+        headers=auth_a,
+    )
+    assert claim_attempts.status_code == 200
+    assert [item["status"] for item in claim_attempts.json()] == ["verified", "unknown"]
 
     cross_tenant = client.get(f"/api/v1/incidents/{case_id}", headers=auth_b)
     assert cross_tenant.status_code == 404

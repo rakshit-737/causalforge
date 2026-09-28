@@ -13,6 +13,7 @@ from causalforge.api.deps import get_case_engine, get_database
 from causalforge.api.routes_events import _run
 from causalforge.api.schemas import (
     ClaimResponse,
+    ClaimVerificationResponse,
     EvidenceResponse,
     GraphResponse,
     HypothesisCreateRequest,
@@ -30,13 +31,14 @@ from causalforge.security.engine import DeterministicCaseEngine
 from causalforge.storage.db import Database
 from causalforge.storage.models import (
     ClaimRecord,
+    ClaimVerificationRecord,
     EvidenceRecord,
     HypothesisRecord,
     IncidentRecord,
     VerificationRecord,
 )
 from causalforge.storage.repositories.evidence import EvidenceRepository
-from causalforge.workflow.verifier import VerificationPolicy, verify_hypothesis
+from causalforge.workflow.verifier import VerificationPolicy, verify_claim, verify_hypothesis
 
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents"])
 
@@ -144,6 +146,24 @@ def _verification_response(record: VerificationRecord) -> VerificationResponse:
     )
 
 
+def _claim_verification_response(record: ClaimVerificationRecord) -> ClaimVerificationResponse:
+    return ClaimVerificationResponse(
+        verification_id=UUID(record.id),
+        claim_id=UUID(record.claim_id),
+        status=record.status,
+        supporting_evidence_ids=[UUID(value) for value in record.supporting_evidence_ids],
+        contradictory_evidence_ids=[UUID(value) for value in record.contradictory_evidence_ids],
+        source_families=list(record.source_families),
+        coverage_sufficient=record.coverage_sufficient,
+        temporal_consistency=record.temporal_consistency,
+        unmet_requirements=list(record.unmet_requirements),
+        reason=record.reason,
+        checked_at=record.checked_at,
+        consumed_evidence_items=record.consumed_evidence_items,
+        budget_exhausted=record.budget_exhausted,
+    )
+
+
 def _get_hypothesis(
     session: Session, *, tenant_id: UUID, incident_id: UUID, hypothesis_id: UUID
 ) -> HypothesisRecord | None:
@@ -152,6 +172,18 @@ def _get_hypothesis(
             HypothesisRecord.id == str(hypothesis_id),
             HypothesisRecord.tenant_id == str(tenant_id),
             HypothesisRecord.incident_id == str(incident_id),
+        )
+    )
+
+
+def _get_claim(
+    session: Session, *, tenant_id: UUID, incident_id: UUID, claim_id: UUID
+) -> ClaimRecord | None:
+    return session.scalar(
+        select(ClaimRecord).where(
+            ClaimRecord.id == str(claim_id),
+            ClaimRecord.tenant_id == str(tenant_id),
+            ClaimRecord.incident_id == str(incident_id),
         )
     )
 
@@ -260,6 +292,119 @@ def list_claims(
             )
         )
     return [_claim_response(row) for row in rows]
+
+
+@router.post(
+    "/{incident_id}/claims/{claim_id}/verify",
+    response_model=ClaimVerificationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def verify_incident_claim(
+    incident_id: UUID,
+    claim_id: UUID,
+    request: VerificationRequest,
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Database, Depends(get_database)],
+    engine: Annotated[DeterministicCaseEngine, Depends(get_case_engine)],
+) -> ClaimVerificationResponse:
+    """Verify one claim against integrity-checked evidence already attached to the case."""
+
+    policy = VerificationPolicy.model_validate(request.model_dump())
+    with database.session() as session:
+        claim_record = _get_claim(
+            session,
+            tenant_id=principal.tenant_id,
+            incident_id=incident_id,
+            claim_id=claim_id,
+        )
+        if claim_record is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="claim not found")
+        evidence_rows = list(
+            session.scalars(
+                select(EvidenceRecord)
+                .where(
+                    EvidenceRecord.tenant_id == str(principal.tenant_id),
+                    EvidenceRecord.case_id == str(incident_id),
+                )
+                .order_by(EvidenceRecord.observed_at.asc(), EvidenceRecord.id.asc())
+            )
+        )
+        try:
+            decision = verify_claim(
+                claim_record.to_claim(),
+                tuple(EvidenceRepository.to_domain(row) for row in evidence_rows),
+                policy=policy,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="evidence verification failed integrity checks",
+            ) from exc
+
+        verification = ClaimVerificationRecord.from_decision(
+            decision,
+            tenant_id=principal.tenant_id,
+            case_id=incident_id,
+            policy=policy,
+        )
+        session.add(verification)
+        claim_record.status = decision.status
+        session.flush()
+        engine.audit.append(
+            session,
+            tenant_id=principal.tenant_id,
+            case_id=incident_id,
+            actor=principal.audit_actor,
+            event_type="claim.verified",
+            payload={
+                "claim_id": str(claim_id),
+                "verification_id": verification.id,
+                "status": decision.status,
+                "supporting_evidence_ids": [
+                    str(value) for value in decision.supporting_evidence_ids
+                ],
+                "contradictory_evidence_ids": [
+                    str(value) for value in decision.contradictory_evidence_ids
+                ],
+                "unmet_requirements": list(decision.unmet_requirements),
+            },
+            policy_decision="allow",
+            created_at=decision.checked_at,
+        )
+        session.commit()
+        return _claim_verification_response(verification)
+
+
+@router.get(
+    "/{incident_id}/claims/{claim_id}/verifications",
+    response_model=list[ClaimVerificationResponse],
+)
+def list_claim_verifications(
+    incident_id: UUID,
+    claim_id: UUID,
+    principal: Annotated[Principal, Depends(get_principal)],
+    database: Annotated[Database, Depends(get_database)],
+) -> list[ClaimVerificationResponse]:
+    with database.session() as session:
+        if _get_claim(
+            session,
+            tenant_id=principal.tenant_id,
+            incident_id=incident_id,
+            claim_id=claim_id,
+        ) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="claim not found")
+        rows = list(
+            session.scalars(
+                select(ClaimVerificationRecord)
+                .where(
+                    ClaimVerificationRecord.tenant_id == str(principal.tenant_id),
+                    ClaimVerificationRecord.incident_id == str(incident_id),
+                    ClaimVerificationRecord.claim_id == str(claim_id),
+                )
+                .order_by(ClaimVerificationRecord.checked_at.desc())
+            )
+        )
+    return [_claim_verification_response(row) for row in rows]
 
 
 @router.get("/{incident_id}/evidence", response_model=list[EvidenceResponse])

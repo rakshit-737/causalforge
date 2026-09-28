@@ -175,6 +175,26 @@ class VerificationResponse(BaseModel):
     budget_exhausted: bool
 
 
+class ClaimVerificationResponse(BaseModel):
+    """Durable result of one evidence-bound claim verification attempt."""
+
+    model_config = ConfigDict(frozen=True)
+
+    verification_id: UUID
+    claim_id: UUID
+    status: str
+    supporting_evidence_ids: list[UUID]
+    contradictory_evidence_ids: list[UUID]
+    source_families: list[str]
+    coverage_sufficient: bool
+    temporal_consistency: bool
+    unmet_requirements: list[str]
+    reason: str
+    checked_at: datetime
+    consumed_evidence_items: int
+    budget_exhausted: bool
+
+
 class IncidentResponse(BaseModel):
     """Tenant-scoped incident summary."""
 
