@@ -156,6 +156,11 @@ def test_evidence_integrity_check_detects_normalized_payload_tampering(tmp_path)
         with pytest.raises(ValueError, match="content hash"):
             EvidenceRepository.verify_integrity(result.evidence_record)
 
+        result.evidence_record.normalized["action"] = event_payload(tenant_id)["action"]
+        result.evidence_record.tenant_id = str(uuid4())
+        with pytest.raises(ValueError, match="provenance metadata"):
+            EvidenceRepository.verify_integrity(result.evidence_record)
+
 
 def test_same_producer_event_id_can_exist_in_two_tenants(tmp_path) -> None:
     tenant_a = uuid4()

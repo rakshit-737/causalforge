@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from causalforge.domain.events import CanonicalEvent, Coverage, SourceRef
 from causalforge.domain.serialization import sha256_hex
@@ -37,6 +37,20 @@ class EvidenceItem(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("evidence timestamps must be timezone-aware")
         return value
+
+    @model_validator(mode="after")
+    def validate_normalized_provenance(self) -> "EvidenceItem":
+        """Bind the normalized payload to the evidence envelope before workflow use."""
+
+        try:
+            event = CanonicalEvent.model_validate(self.normalized)
+        except ValidationError as exc:
+            raise ValueError("evidence normalized payload is not a canonical event") from exc
+        if event.tenant_id != self.tenant_id:
+            raise ValueError("evidence tenant does not match its normalized event")
+        if self.content_hash_for(self.normalized) != self.content_hash:
+            raise ValueError("evidence content hash does not match its normalized event")
+        return self
 
     @classmethod
     def from_event(
