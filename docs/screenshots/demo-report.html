@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CausalForge · Offline investigation snapshot</title>
+  <style>
+    :root { color-scheme: dark; --bg:#07111f; --panel:#0d1b2e; --panel-2:#10243b; --ink:#e8f0fa; --muted:#91a5bd; --line:#1d3854; --cyan:#66d9ef; --green:#7ee2a8; --amber:#f4c76d; --red:#ff8d8d; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background: radial-gradient(circle at 85% 0%, #143458 0, transparent 38%), var(--bg); color:var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+    .shell { width: 1180px; margin: 0 auto; padding: 34px 34px 48px; }
+    .top { display:flex; align-items:center; justify-content:space-between; margin-bottom:34px; }
+    .brand { display:flex; gap:14px; align-items:center; }
+    .mark { width:40px; height:40px; border:1px solid #2b6685; border-radius:12px; display:grid; place-items:center; color:var(--cyan); background:#0c263c; font-weight:800; letter-spacing:-.08em; }
+    .brand strong { display:block; font-size:17px; letter-spacing:.02em; }
+    .brand span { color:var(--muted); font-size:12px; }
+    .badge { border:1px solid #2d7055; color:var(--green); background:#0c2c27; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:700; }
+    h1 { margin:0; font-size:36px; line-height:1.08; letter-spacing:-.045em; max-width:720px; }
+    .lede { color:var(--muted); max-width:720px; margin:12px 0 28px; }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:22px 0 28px; }
+    .metric, .card { border:1px solid var(--line); background:linear-gradient(145deg, rgba(17,38,62,.96), rgba(9,23,40,.96)); border-radius:15px; box-shadow:0 16px 40px rgba(0,0,0,.18); }
+    .metric { padding:17px 18px; }
+    .metric .value { font-size:28px; font-weight:800; letter-spacing:-.04em; }
+    .metric .label { color:var(--muted); font-size:12px; margin-top:3px; }
+    .grid { display:grid; grid-template-columns:1.25fr .75fr; gap:16px; }
+    .card { padding:22px; }
+    .card h2 { margin:0 0 15px; font-size:15px; letter-spacing:.01em; }
+    .claim { display:flex; align-items:flex-start; gap:12px; padding:14px; border:1px solid #25445d; background:rgba(9,28,47,.7); border-radius:12px; }
+    .claim-icon { color:var(--cyan); font-weight:900; font-size:19px; }
+    .claim strong { display:block; font-size:14px; }
+    .claim small { color:var(--muted); display:block; margin-top:4px; }
+    code { color:#b9eaf4; font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .unknown { border-color:#725b2a; background:linear-gradient(145deg, #2a2414, #171a18); }
+    .unknown .claim-icon { color:var(--amber); }
+    .unknown strong { color:#ffe6a6; }
+    .facts { list-style:none; padding:0; margin:0; }
+    .facts li { display:flex; justify-content:space-between; gap:18px; padding:10px 0; border-bottom:1px solid rgba(29,56,84,.7); }
+    .facts li:last-child { border-bottom:0; }
+    .facts span { color:var(--muted); }
+    .facts b { color:var(--ink); text-align:right; }
+    .graph { margin-top:16px; height:180px; position:relative; overflow:hidden; background: radial-gradient(circle at 50% 45%, rgba(35,102,130,.32), transparent 30%), #09182a; }
+    .graph:before { content:""; position:absolute; inset:0; opacity:.3; background-image:linear-gradient(rgba(100,217,239,.15) 1px, transparent 1px), linear-gradient(90deg, rgba(100,217,239,.15) 1px, transparent 1px); background-size:28px 28px; }
+    .node { position:absolute; z-index:1; border-radius:999px; padding:8px 12px; font-size:11px; font-weight:700; border:1px solid; background:#10283d; }
+    .node.workload { left:8%; top:42%; border-color:#5ebbd1; color:#a9f0fb; }
+    .node.identity { left:37%; top:17%; border-color:#a993e4; color:#ddd1ff; }
+    .node.secret { left:40%; top:68%; border-color:#f0bc6a; color:#ffe1a4; }
+    .node.billing { right:9%; top:42%; border-color:#70d79e; color:#baf5d0; }
+    .edge { position:absolute; z-index:0; height:1px; background:#4b9bb3; transform-origin:left center; }
+    .e1 { left:22%; top:49%; width:22%; transform:rotate(-24deg); }
+    .e2 { left:22%; top:52%; width:24%; transform:rotate(24deg); background:#e7b45d; }
+    .e3 { left:55%; top:49%; width:26%; background:#66d49a; }
+    .legend { display:flex; gap:18px; color:var(--muted); font-size:11px; margin-top:11px; }
+    .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; background:var(--cyan); }
+    .dot.amber { background:var(--amber); } .dot.green { background:var(--green); }
+    footer { color:#6f849b; font-size:11px; margin-top:24px; display:flex; justify-content:space-between; }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="top">
+      <div class="brand"><div class="mark">CF</div><div><strong>CausalForge</strong><span>Evidence-bound investigation control plane</span></div></div>
+      <div class="badge">RULE-ONLY · OFFLINE</div>
+    </div>
+    <h1>Compromised orders workload</h1>
+    <p class="lede">A synthetic incident reconstruction generated without Kubernetes, credentials, external network access, or an LLM.</p>
+    <section class="metrics">
+      <div class="metric"><div class="value">5</div><div class="label">events replayed</div></div>
+      <div class="metric"><div class="value">1</div><div class="label">deterministic detections</div></div>
+      <div class="metric"><div class="value">1</div><div class="label">observed claims</div></div>
+      <div class="metric"><div class="value" style="color:var(--green)">VALID</div><div class="label">audit chain</div></div>
+    </section>
+    <section class="grid">
+      <div class="card">
+        <h2>Established by evidence</h2>
+        <div class="claim"><div class="claim-icon">✓</div><div><strong>orders-reader listed a Kubernetes secret</strong><small>Observed · evidence <code>dfb72841-7cfd-5ffc-808a-593ff110d569</code></small></div></div>
+        <div class="claim" style="margin-top:10px"><div class="claim-icon">✓</div><div><strong>orders-api communicated with billing-api</strong><small>Allowed communication edge · temporal graph projection</small></div></div>
+        <div class="claim unknown" style="margin-top:10px"><div class="claim-icon">?</div><div><strong>Successful secret exfiltration: UNKNOWN</strong><small>No evidence proves that secret values left the workload.</small></div></div>
+        <div class="graph card"><div class="edge e1"></div><div class="edge e2"></div><div class="edge e3"></div><div class="node workload">orders-api</div><div class="node identity">orders-reader</div><div class="node secret">secret</div><div class="node billing">billing-api</div></div>
+        <div class="legend"><span><i class="dot"></i>identity / event</span><span><i class="dot amber"></i>secret access</span><span><i class="dot green"></i>allowed communication</span></div>
+      </div>
+      <div class="card">
+        <h2>Scenario facts</h2>
+        <ul class="facts">
+          <li><span>Scenario</span><b>compromised-orders-workload</b></li>
+          <li><span>Seed</span><b>737</b></li>
+          <li><span>Nodes</span><b>14</b></li>
+          <li><span>Edges</span><b>17</b></li>
+          <li><span>Denied attempts</span><b>1</b></li>
+          <li><span>Successful exfiltration</span><b style="color:var(--amber)">NOT ESTABLISHED</b></li>
+        </ul>
+        <div style="margin-top:25px; padding:14px; border:1px solid #23405a; border-radius:12px; color:var(--muted); font-size:12px;">Every conclusion stays tied to provenance. Model-assisted hypotheses, response simulation, and human approval remain explicit later phases.</div>
+      </div>
+    </section>
+    <footer><span>Generated from reports/demo.md</span><span>Local fixture · no target writes</span></footer>
+  </main>
+</body>
+</html>

@@ -46,6 +46,21 @@ The report shows secret enumeration, allowed and denied communication, a valid a
 successful secret exfiltration explicitly marked **UNKNOWN / NOT ESTABLISHED**. Response simulation
 and human approval are intentionally not part of this offline fixture yet.
 
+## Project snapshots
+
+The current checkpoint is API-first rather than a browser analyst UI. These are real local project
+captures: the FastAPI OpenAPI surface and the deterministic offline investigation result.
+
+<p align="center">
+  <img src="docs/screenshots/offline-demo.png" alt="CausalForge offline investigation snapshot" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/api-docs.png" alt="CausalForge FastAPI OpenAPI documentation" width="900">
+</p>
+
+See [docs/screenshots/](docs/screenshots/) for the source note and offline snapshot HTML.
+
 ## Development status
 
 See [docs/implementation-state.md](docs/implementation-state.md) for the current checkpoint and
