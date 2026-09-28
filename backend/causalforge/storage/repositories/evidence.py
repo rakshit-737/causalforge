@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from causalforge.domain.events import CanonicalEvent, Coverage, SourceRef
@@ -26,8 +27,21 @@ class EvidenceRepository:
         if existing is not None:
             return existing, False
         record = EvidenceRecord.from_evidence(evidence)
-        session.add(record)
-        session.flush()
+        try:
+            with session.begin_nested():
+                session.add(record)
+                session.flush()
+        except IntegrityError:
+            existing = session.scalar(
+                select(EvidenceRecord).where(
+                    EvidenceRecord.tenant_id == str(evidence.tenant_id),
+                    EvidenceRecord.case_id == str(evidence.case_id),
+                    EvidenceRecord.content_hash == evidence.content_hash,
+                )
+            )
+            if existing is not None:
+                return existing, False
+            raise
         return record, True
 
     def list_for_case(

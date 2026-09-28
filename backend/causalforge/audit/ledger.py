@@ -6,6 +6,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from causalforge.domain.serialization import canonical_json_bytes, sha256_bytes, sha256_hex
@@ -102,65 +103,84 @@ class AuditLedger:
         timestamp = _require_aware(created_at or datetime.now(UTC))
         tenant_key = str(tenant_id)
         case_key = str(case_id)
-        previous_entry = session.scalar(
-            select(AuditEntryRecord)
-            .where(
-                AuditEntryRecord.tenant_id == tenant_key,
-                AuditEntryRecord.case_id == case_key,
-            )
-            .order_by(AuditEntryRecord.sequence.desc())
-        )
-        sequence = (previous_entry.sequence + 1) if previous_entry else 1
-        previous_hash = previous_entry.entry_hash if previous_entry else GENESIS_HASH
-        entry_id = str(uuid4())
         artifact_ids = list(retrieved_artifact_ids or [])
         payload_hash = sha256_hex(payload)
-        fields = _hashable_fields(
-            entry_id=entry_id,
-            tenant_id=tenant_key,
-            case_id=case_key,
-            sequence=sequence,
-            created_at=timestamp,
-            actor=actor,
-            event_type=event_type,
-            tool_name=tool_name,
-            model_provider=model_provider,
-            model_id=model_id,
-            prompt_template_sha256=prompt_template_sha256,
-            retrieved_artifact_ids=artifact_ids,
-            redacted_arguments_sha256=redacted_arguments_sha256,
-            output_sha256=output_sha256,
-            previous_entry_hash=previous_hash,
-            payload_sha256=payload_hash,
-            policy_decision=policy_decision,
-            approval_id=str(approval_id) if approval_id else None,
-            execution_result=execution_result,
-        )
-        record = AuditEntryRecord(
-            id=entry_id,
-            tenant_id=tenant_key,
-            case_id=case_key,
-            sequence=sequence,
-            created_at=timestamp,
-            actor=dict(actor),
-            event_type=event_type,
-            tool_name=tool_name,
-            model_provider=model_provider,
-            model_id=model_id,
-            prompt_template_sha256=prompt_template_sha256,
-            retrieved_artifact_ids=artifact_ids,
-            redacted_arguments_sha256=redacted_arguments_sha256,
-            output_sha256=output_sha256,
-            previous_entry_hash=previous_hash,
-            payload_sha256=payload_hash,
-            policy_decision=policy_decision,
-            approval_id=str(approval_id) if approval_id else None,
-            execution_result=dict(execution_result) if execution_result else None,
-            entry_hash=_entry_hash(fields),
-        )
-        session.add(record)
-        session.flush()
-        return record
+        last_error: IntegrityError | None = None
+        for _ in range(3):
+            previous_entry = session.scalar(
+                select(AuditEntryRecord)
+                .where(
+                    AuditEntryRecord.tenant_id == tenant_key,
+                    AuditEntryRecord.case_id == case_key,
+                )
+                .order_by(AuditEntryRecord.sequence.desc())
+            )
+            sequence = (previous_entry.sequence + 1) if previous_entry else 1
+            previous_hash = previous_entry.entry_hash if previous_entry else GENESIS_HASH
+            entry_id = str(uuid4())
+            fields = _hashable_fields(
+                entry_id=entry_id,
+                tenant_id=tenant_key,
+                case_id=case_key,
+                sequence=sequence,
+                created_at=timestamp,
+                actor=actor,
+                event_type=event_type,
+                tool_name=tool_name,
+                model_provider=model_provider,
+                model_id=model_id,
+                prompt_template_sha256=prompt_template_sha256,
+                retrieved_artifact_ids=artifact_ids,
+                redacted_arguments_sha256=redacted_arguments_sha256,
+                output_sha256=output_sha256,
+                previous_entry_hash=previous_hash,
+                payload_sha256=payload_hash,
+                policy_decision=policy_decision,
+                approval_id=str(approval_id) if approval_id else None,
+                execution_result=execution_result,
+            )
+            record = AuditEntryRecord(
+                id=entry_id,
+                tenant_id=tenant_key,
+                case_id=case_key,
+                sequence=sequence,
+                created_at=timestamp,
+                actor=dict(actor),
+                event_type=event_type,
+                tool_name=tool_name,
+                model_provider=model_provider,
+                model_id=model_id,
+                prompt_template_sha256=prompt_template_sha256,
+                retrieved_artifact_ids=artifact_ids,
+                redacted_arguments_sha256=redacted_arguments_sha256,
+                output_sha256=output_sha256,
+                previous_entry_hash=previous_hash,
+                payload_sha256=payload_hash,
+                policy_decision=policy_decision,
+                approval_id=str(approval_id) if approval_id else None,
+                execution_result=dict(execution_result) if execution_result else None,
+                entry_hash=_entry_hash(fields),
+            )
+            try:
+                with session.begin_nested():
+                    session.add(record)
+                    session.flush()
+                return record
+            except IntegrityError as exc:
+                last_error = exc
+                latest = session.scalar(
+                    select(AuditEntryRecord)
+                    .where(
+                        AuditEntryRecord.tenant_id == tenant_key,
+                        AuditEntryRecord.case_id == case_key,
+                    )
+                    .order_by(AuditEntryRecord.sequence.desc())
+                )
+                if latest is None or latest.sequence < sequence:
+                    raise
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("audit append retry loop exited without a result")
 
     def verify(self, session: Session, *, tenant_id: UUID, case_id: UUID) -> bool:
         """Verify sequence, predecessor links, and entry hashes for one scoped chain."""

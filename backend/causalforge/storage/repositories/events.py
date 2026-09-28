@@ -1,6 +1,7 @@
 """Tenant-scoped canonical event repository."""
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from causalforge.domain.events import CanonicalEvent
@@ -30,8 +31,32 @@ class EventRepository:
         if producer_existing is not None:
             raise ValueError("producer event_id is already bound to different content")
         record = EventRecord.from_event(event)
-        session.add(record)
-        session.flush()
+        try:
+            with session.begin_nested():
+                session.add(record)
+                session.flush()
+        except IntegrityError as exc:
+            # Another transaction may have won the same uniqueness race after the preflight read.
+            # The savepoint keeps the caller's outer transaction usable for a safe re-read.
+            existing = session.scalar(
+                select(EventRecord).where(
+                    EventRecord.tenant_id == str(event.tenant_id),
+                    EventRecord.deduplication_key == key,
+                )
+            )
+            if existing is not None:
+                return existing, False
+            producer_existing = session.scalar(
+                select(EventRecord).where(
+                    EventRecord.tenant_id == str(event.tenant_id),
+                    EventRecord.producer_event_id == str(event.event_id),
+                )
+            )
+            if producer_existing is not None:
+                raise ValueError(
+                    "producer event_id is already bound to different content"
+                ) from exc
+            raise
         return record, True
 
     def get_for_tenant(
