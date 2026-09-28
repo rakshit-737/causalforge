@@ -50,13 +50,20 @@
 - Added the offline compromised-orders workload fixture, rule-only demo runner, deterministic
   Markdown report, and regression test. It uses in-memory SQLite and never connects to a cluster,
   credentials, an external network, or an LLM.
+- Added durable hypothesis and verification-record tables with Alembic migration `0007`.
+- Added a fail-closed verifier requiring independent source families, complete coverage, bounded
+  evidence counts, and unexpired deadlines; unsuccessful checks remain explicit
+  `insufficient_evidence` outcomes.
+- Exposed tenant-scoped hypothesis creation/listing and durable verification-attempt API endpoints.
+- Bound evidence integrity to the canonical event's tenant, source, parser, timestamps, coverage,
+  and content hash before workflow evaluation.
 
 ## Tests run
 
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 77 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 85 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -82,6 +89,9 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
   transitions through a coordinator.
 - The local principal adapter is a development identity check, not production authentication or
   authorization middleware; production token verification and secret management remain open.
+- Hypothesis verification is evidence-bound but currently evaluates already-collected evidence;
+  no collector broker, durable planner, retry/deadline worker, contradiction matcher, or claim
+  promotion coordinator exists yet.
 
 ## Next smallest task
 

@@ -59,7 +59,7 @@ ATT&CK/STIX ingestion and vector retrieval remain optional follow-up integration
 
 ## Phase 4 - investigation workflow
 
-**Status: deterministic API checkpoint complete; durable hypotheses/planner/verifier remain.**
+**Status: durable hypothesis/verifier checkpoint complete; planner/collector/coordinator remain.**
 
 - Add durable coordinator, competing hypotheses, active evidence planning, typed tool broker,
   collector, verifier, risk assessor, and report composer.
@@ -68,8 +68,10 @@ ATT&CK/STIX ingestion and vector retrieval remain optional follow-up integration
 - Acceptance: the demo reaches `VERIFIED` or `INSUFFICIENT_EVIDENCE` without unsupported claims.
 
 The local API now exposes tenant-verified event ingestion, incident lifecycle, evidence, claims,
-timeline, and graph snapshots. It intentionally does not expose unverified model conclusions or
-response execution.
+timeline, graph snapshots, durable hypotheses, and bounded verification attempts. It intentionally
+does not expose unverified model conclusions or response execution. Verification only returns
+`supported` after independent-source and coverage gates pass; otherwise it records
+`insufficient_evidence`.
 
 ## Phase 5 — response safety
 

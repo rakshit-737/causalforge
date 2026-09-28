@@ -20,7 +20,8 @@ engine, provider-neutral structured-output boundary, deterministic rule-only fal
 prompt-injection-safe context builder, tenant-scoped local knowledge retrieval, and a local
 principal-verified investigation API. It also includes a deterministic, offline compromised
 `orders-api` fixture and generated evidence-bound report. The durable agent workflow, UI, and
-response execution remain later phases.
+bounded hypothesis verifier are present; collector planning, UI, and response execution remain
+later phases.
 
 ## Design invariants
 
