@@ -100,6 +100,35 @@ def test_ingestion_is_idempotent_for_duplicate_payload(tmp_path) -> None:
         assert len(list(session.scalars(select(AuditEntryRecord)))) == 2
 
 
+def test_semantic_replay_with_new_producer_id_does_not_duplicate_evidence(tmp_path) -> None:
+    tenant_id = uuid4()
+    case_id = uuid4()
+    database = Database(f"sqlite:///{tmp_path / 'semantic-replay.db'}")
+    database.create_schema()
+    service = IngestionService()
+    first_payload = event_payload(tenant_id)
+    replay_payload = dict(first_payload)
+    replay_payload["event_id"] = str(uuid4())
+
+    with database.session() as session:
+        first = service.ingest(
+            session, payload=first_payload, case_id=case_id, parser_version="fixture-1.0"
+        )
+        session.commit()
+        replay = service.ingest(
+            session, payload=replay_payload, case_id=case_id, parser_version="fixture-1.0"
+        )
+        session.commit()
+
+        assert first.duplicate is False
+        assert replay.duplicate is True
+        assert replay.normalized.event.event_id == first.normalized.event.event_id
+        assert replay.evidence_record is not None
+        assert replay.evidence_record.id == first.evidence_record.id
+        assert len(list(session.scalars(select(EvidenceRecord)))) == 1
+        assert len(list(session.scalars(select(AuditEntryRecord)))) == 1
+
+
 def test_audit_chain_detects_tampering(tmp_path) -> None:
     tenant_id = uuid4()
     case_id = uuid4()

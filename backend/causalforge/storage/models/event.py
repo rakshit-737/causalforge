@@ -76,3 +76,8 @@ class EventRecord(Base):
             deduplication_key=deduplication_key(event),
             canonical_payload=event.canonical_payload(),
         )
+
+    def to_event(self) -> CanonicalEvent:
+        """Revalidate the persisted canonical payload before replay use."""
+
+        return CanonicalEvent.model_validate(self.canonical_payload)

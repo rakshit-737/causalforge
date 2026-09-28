@@ -59,6 +59,14 @@ class IngestionService:
         if expected_tenant_id is not None and normalized.event.tenant_id != expected_tenant_id:
             raise ValueError("event tenant does not match the requested case tenant")
         event_record, inserted = self.events.append(session, event=normalized.event)
+        if not inserted:
+            # Deduplication intentionally ignores producer IDs and receipt metadata. Replays must
+            # attach the already-persisted canonical observation, not create a second evidence
+            # lineage from a semantically identical but differently identified payload.
+            normalized = NormalizedEvent(
+                event=event_record.to_event(),
+                redaction=normalized.redaction,
+            )
         collected = collected_at or datetime.now(UTC)
         evidence = EvidenceItem.from_event(
             normalized.event,
