@@ -24,8 +24,10 @@ def test_initial_alembic_migration_creates_phase1_tables(tmp_path, monkeypatch) 
             "events",
             "evidence_items",
             "incidents",
+            "hypotheses",
             "tenants",
             "users",
+            "verification_records",
         }
     finally:
         engine.dispose()

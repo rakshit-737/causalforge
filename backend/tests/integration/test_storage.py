@@ -50,6 +50,8 @@ def test_database_schema_contains_phase1_tables(tmp_path) -> None:
         "events",
         "evidence_items",
         "incidents",
+        "hypotheses",
         "tenants",
         "users",
+        "verification_records",
     }

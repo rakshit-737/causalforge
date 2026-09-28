@@ -7,6 +7,7 @@ from causalforge.storage.models.detection import DetectionRecord
 from causalforge.storage.models.document import DocumentChunkRecord, DocumentRecord
 from causalforge.storage.models.event import EventRecord
 from causalforge.storage.models.evidence import EvidenceRecord
+from causalforge.storage.models.hypothesis import HypothesisRecord, VerificationRecord
 from causalforge.storage.models.incident import IncidentRecord
 from causalforge.storage.models.tenant import Tenant
 from causalforge.storage.models.user import User
@@ -21,6 +22,8 @@ __all__ = [
     "EventRecord",
     "EvidenceRecord",
     "IncidentRecord",
+    "HypothesisRecord",
     "Tenant",
     "User",
+    "VerificationRecord",
 ]
