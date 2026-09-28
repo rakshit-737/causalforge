@@ -5,6 +5,7 @@ from typing import cast
 from fastapi import Request
 
 from causalforge.config import Settings
+from causalforge.security.engine import DeterministicCaseEngine
 from causalforge.storage.db import Database
 from causalforge.storage.health import ReadinessRegistry
 
@@ -25,3 +26,9 @@ def get_readiness(request: Request) -> ReadinessRegistry:
     """Read the dependency readiness registry from application state."""
 
     return cast(ReadinessRegistry, request.app.state.readiness)
+
+
+def get_case_engine(request: Request) -> DeterministicCaseEngine:
+    """Read the deterministic case engine from application state."""
+
+    return cast(DeterministicCaseEngine, request.app.state.case_engine)

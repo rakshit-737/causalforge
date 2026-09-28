@@ -12,13 +12,14 @@ verification and policy controls decide what can be called verified or executed.
 
 ## Current checkpoint
 
-The repository is at **Phase 3 — AI boundary and retrieval**. It contains the versioned domain
+The repository is at **Phase 4 — deterministic investigation API**. It contains the versioned domain
 schemas, state-transition contract, FastAPI/infrastructure shell, strict canonical event ingestion,
 redaction and deduplication, an evidence ledger, a hash-chained audit log, temporal graph and RBAC
 reachability utilities, a scoped Sigma subset, bounded event correlation, and a rule-only case
 engine, provider-neutral structured-output boundary, deterministic rule-only fallback,
-prompt-injection-safe context builder, and tenant-scoped local knowledge retrieval. The lab
-scenario, public investigation API, UI, and response execution remain later phases.
+prompt-injection-safe context builder, tenant-scoped local knowledge retrieval, and a local
+principal-verified investigation API. The lab scenario, durable agent workflow, UI, and response
+execution remain later phases.
 
 ## Design invariants
 
@@ -58,6 +59,8 @@ Then open `http://127.0.0.1:8000/docs` or check:
 GET /health/live
 GET /health/ready
 ```
+
+See [docs/api.md](docs/api.md) for the local principal headers and deterministic replay flow.
 
 The default local profile uses SQLite and requires the explicit migration command below; automatic
 schema creation is available only for isolated tests. For the optional local PostgreSQL and Redis

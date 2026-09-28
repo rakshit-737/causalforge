@@ -57,13 +57,19 @@ The provider boundary, safe context construction, tenant-scoped local retrieval,
 Markdown chunking, citation contracts, and a local Kubernetes runbook are implemented. Remote
 ATT&CK/STIX ingestion and vector retrieval remain optional follow-up integrations.
 
-## Phase 4 — investigation workflow
+## Phase 4 - investigation workflow
+
+**Status: deterministic API checkpoint complete; durable hypotheses/planner/verifier remain.**
 
 - Add durable coordinator, competing hypotheses, active evidence planning, typed tool broker,
   collector, verifier, risk assessor, and report composer.
 - Add deadlines, budgets, idempotency, retries only for read operations, and incomplete-case
   preservation.
 - Acceptance: the demo reaches `VERIFIED` or `INSUFFICIENT_EVIDENCE` without unsupported claims.
+
+The local API now exposes tenant-verified event ingestion, incident lifecycle, evidence, claims,
+timeline, and graph snapshots. It intentionally does not expose unverified model conclusions or
+response execution.
 
 ## Phase 5 — response safety
 

@@ -2,18 +2,26 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
+from causalforge.api.routes_events import router as events_router
 from causalforge.api.routes_health import router as health_router
+from causalforge.api.routes_incidents import router as incidents_router
 from causalforge.config import Settings, get_settings
+from causalforge.detection.sigma_engine import load_rules
 from causalforge.observability.logging import configure_logging, get_logger
 from causalforge.observability.middleware import RequestContextMiddleware
+from causalforge.security.engine import DeterministicCaseEngine
 from causalforge.storage.db import Database
 from causalforge.storage.health import DatabaseProbe, ReadinessRegistry, RedisProbe, StaticProbe
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    case_engine: DeterministicCaseEngine | None = None,
+) -> FastAPI:
     """Create an application with explicit settings and lifecycle-managed resources."""
 
     runtime_settings = settings or get_settings()
@@ -39,6 +47,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = runtime_settings
+    rules_dir = Path(__file__).resolve().parents[2] / "rules" / "sigma"
+    app.state.case_engine = case_engine or DeterministicCaseEngine(rules=load_rules(rules_dir))
     app.state.database = Database(
         runtime_settings.database_url,
         echo=runtime_settings.database_echo,
@@ -61,6 +71,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(RequestContextMiddleware)
     app.include_router(health_router)
+    app.include_router(events_router)
+    app.include_router(incidents_router)
     return app
 
 

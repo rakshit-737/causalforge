@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 3 — AI boundary and retrieval (AI boundary increment)**
+**Phase 4 — deterministic investigation API checkpoint**
 
 ## Completed in this checkpoint
 
@@ -39,13 +39,19 @@
   text flags, and explicit trusted/untrusted message separation.
 - Added tenant-scoped/global knowledge document contracts, deterministic Markdown chunking, local
   token-overlap retrieval, citation metadata, and a Kubernetes secret-enumeration runbook.
+- Added a local principal adapter that verifies `X-Tenant-ID`/`X-User-ID` against the local database;
+  the tenant header is no longer trusted by itself.
+- Added versioned event and incident APIs for bounded replay, tenant-isolated reads, claims,
+  evidence, timeline, graph, and safe empty placeholders for future hypotheses/response plans.
+- Added API contract tests for missing principals, tenant isolation, redaction, tenant mismatch,
+  and static route ordering.
 
 ## Tests run
 
-The focused Phase 3 checks now pass:
+The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 66 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 73 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -65,7 +71,7 @@ mypy backend/causalforge
 
 ## Known limitations
 
-- No public event-ingestion API, worker, UI, or lab runtime exists yet.
+- No durable worker, UI, or lab runtime exists yet.
 - Remote ATT&CK/STIX ingestion and vector retrieval are not implemented yet; local approved
   Markdown retrieval is deterministic and tenant-scoped.
 - PostgreSQL and Redis containers are declared but were not started in this environment because
@@ -80,8 +86,9 @@ mypy backend/causalforge
 
 ## Next smallest task
 
-Implement the versioned API exposure layer for events, incidents, evidence, graph snapshots, claims,
-and deterministic investigation runs with tenant scope and safe error responses.
+Implement durable investigation workflow artifacts: competing hypotheses, evidence planning,
+claim verification with source independence/coverage rules, deadlines, budgets, and explicit
+`INSUFFICIENT_EVIDENCE` outcomes.
 
 ## Architectural constraints carried forward
 
