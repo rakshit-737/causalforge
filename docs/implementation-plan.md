@@ -44,12 +44,17 @@ The graph and correlation outputs are currently in-memory projections returned b
 engine. Event, evidence, incident, detection, claim, and audit records are persisted; graph snapshots
 and RBAC snapshots will receive durable API contracts in the next integration increment.
 
-## Phase 3 — AI boundary and retrieval
+## Phase 3 - AI boundary and retrieval
+
+**Status: AI boundary complete; tenant-scoped retrieval remains.**
 
 - Add provider-neutral structured-output adapter and deterministic rule-only fallback.
 - Add tenant-scoped document retrieval and ATT&CK/STIX enrichment adapters.
 - Add prompt-injection-resistant context construction and malformed-output tests.
 - Acceptance: the same fixture investigation completes with or without an LLM provider.
+
+The provider boundary and safe context construction are implemented in `backend/causalforge/ai/`.
+Knowledge retrieval and ATT&CK/STIX document ingestion are the remaining Phase 3 increment.
 
 ## Phase 4 — investigation workflow
 

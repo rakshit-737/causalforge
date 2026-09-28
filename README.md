@@ -12,11 +12,13 @@ verification and policy controls decide what can be called verified or executed.
 
 ## Current checkpoint
 
-The repository is at **Phase 2 — deterministic security engine**. It contains the versioned domain
+The repository is at **Phase 3 — AI boundary and retrieval**. It contains the versioned domain
 schemas, state-transition contract, FastAPI/infrastructure shell, strict canonical event ingestion,
 redaction and deduplication, an evidence ledger, a hash-chained audit log, temporal graph and RBAC
 reachability utilities, a scoped Sigma subset, bounded event correlation, and a rule-only case
-engine. The lab scenario, AI workflow, UI, and response execution remain later phases.
+engine, provider-neutral structured-output boundary, deterministic rule-only fallback, and
+prompt-injection-safe context builder. Tenant-scoped retrieval, the lab scenario, UI, and response
+execution remain later phases.
 
 ## Design invariants
 

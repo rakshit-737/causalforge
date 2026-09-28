@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 2 — deterministic security engine (local fixture checkpoint)**
+**Phase 3 — AI boundary and retrieval (AI boundary increment)**
 
 ## Completed in this checkpoint
 
@@ -32,13 +32,18 @@
   reachability that distinguishes allowed, denied, and unknown coverage.
 - Added a tested Sigma-compatible subset, deterministic bounded sequence correlation, and the
   rule-only case engine that persists incidents, detections, and observed claims.
+- Added a provider-neutral structured-output contract, OpenAI-compatible adapter, and deterministic
+  fallback provider.
+- Added strict Pydantic hypothesis output models and fail-closed malformed-output handling.
+- Added prompt-injection-safe context construction with redaction, size bounds, instruction-like
+  text flags, and explicit trusted/untrusted message separation.
 
 ## Tests run
 
-The focused Phase 1 checks now pass:
+The focused Phase 3 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 54 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 61 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 7 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -59,6 +64,7 @@ mypy backend/causalforge
 ## Known limitations
 
 - No public event-ingestion API, worker, UI, or lab runtime exists yet.
+- Tenant-scoped document retrieval and ATT&CK/STIX ingestion are not implemented yet.
 - PostgreSQL and Redis containers are declared but were not started in this environment because
   Docker is unavailable; the tested runtime uses local SQLite and the Redis probe's failure path.
 - Graph snapshots, RBAC snapshots, and correlation matches are not yet exposed as durable API
@@ -71,8 +77,8 @@ mypy backend/causalforge
 
 ## Next smallest task
 
-Implement Phase 3's provider-neutral AI boundary and retrieval layer with a deterministic fallback,
-strict structured outputs, tenant-scoped knowledge retrieval, and prompt-injection tests.
+Implement the remaining Phase 3 retrieval layer: tenant-scoped documents, local full-text search,
+ATT&CK/runbook contracts, and citations that can be passed through the safe AI context.
 
 ## Architectural constraints carried forward
 
