@@ -16,9 +16,9 @@ The repository is at **Phase 3 — AI boundary and retrieval**. It contains the 
 schemas, state-transition contract, FastAPI/infrastructure shell, strict canonical event ingestion,
 redaction and deduplication, an evidence ledger, a hash-chained audit log, temporal graph and RBAC
 reachability utilities, a scoped Sigma subset, bounded event correlation, and a rule-only case
-engine, provider-neutral structured-output boundary, deterministic rule-only fallback, and
-prompt-injection-safe context builder. Tenant-scoped retrieval, the lab scenario, UI, and response
-execution remain later phases.
+engine, provider-neutral structured-output boundary, deterministic rule-only fallback,
+prompt-injection-safe context builder, and tenant-scoped local knowledge retrieval. The lab
+scenario, public investigation API, UI, and response execution remain later phases.
 
 ## Design invariants
 

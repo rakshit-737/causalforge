@@ -67,6 +67,13 @@ A response plan contains typed actions only. Each action names an allowlisted ac
 target selector/scope, preconditions, expected effects, service invariants, rollback data,
 approval class, idempotency key, and simulation result. It does not contain arbitrary commands.
 
+## Knowledge documents and citations
+
+Approved background documents are stored separately from incident evidence. Global documents have
+no tenant ID; private documents have one tenant ID. Chunks retain the document content hash,
+source, version, license, and ordinal. Retrieval always filters to global or requested-tenant
+chunks before ranking and returns a `KnowledgeCitation` rather than a new incident fact.
+
 ## Audit chain
 
 For an entry without `entry_hash`:

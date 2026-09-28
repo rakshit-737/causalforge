@@ -8,7 +8,7 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
-SCHEMA_REVISION = "0003_deterministic_engine"
+SCHEMA_REVISION = "0004_knowledge_documents"
 
 
 class UTCDateTime(TypeDecorator[datetime]):

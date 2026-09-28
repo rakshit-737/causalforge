@@ -45,6 +45,8 @@ def test_database_schema_contains_phase1_tables(tmp_path) -> None:
         "audit_entries",
         "claims",
         "detections",
+        "document_chunks",
+        "documents",
         "events",
         "evidence_items",
         "incidents",

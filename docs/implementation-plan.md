@@ -46,15 +46,16 @@ and RBAC snapshots will receive durable API contracts in the next integration in
 
 ## Phase 3 - AI boundary and retrieval
 
-**Status: AI boundary complete; tenant-scoped retrieval remains.**
+**Status: complete for the local deterministic retrieval checkpoint.**
 
 - Add provider-neutral structured-output adapter and deterministic rule-only fallback.
 - Add tenant-scoped document retrieval and ATT&CK/STIX enrichment adapters.
 - Add prompt-injection-resistant context construction and malformed-output tests.
 - Acceptance: the same fixture investigation completes with or without an LLM provider.
 
-The provider boundary and safe context construction are implemented in `backend/causalforge/ai/`.
-Knowledge retrieval and ATT&CK/STIX document ingestion are the remaining Phase 3 increment.
+The provider boundary, safe context construction, tenant-scoped local retrieval, deterministic
+Markdown chunking, citation contracts, and a local Kubernetes runbook are implemented. Remote
+ATT&CK/STIX ingestion and vector retrieval remain optional follow-up integrations.
 
 ## Phase 4 — investigation workflow
 

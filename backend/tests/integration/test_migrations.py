@@ -19,6 +19,8 @@ def test_initial_alembic_migration_creates_phase1_tables(tmp_path, monkeypatch) 
             "audit_entries",
             "claims",
             "detections",
+            "document_chunks",
+            "documents",
             "events",
             "evidence_items",
             "incidents",
