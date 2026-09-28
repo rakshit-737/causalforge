@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causalforge.dev/schemas/audit-entry.schema.json",
+  "title": "CausalForge audit entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "entry_id",
+    "tenant_id",
+    "case_id",
+    "sequence",
+    "created_at",
+    "actor",
+    "event_type",
+    "previous_entry_hash",
+    "payload_sha256",
+    "policy_decision",
+    "entry_hash"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "entry_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "case_id": {"type": "string", "format": "uuid"},
+    "sequence": {"type": "integer", "minimum": 0},
+    "created_at": {"type": "string", "format": "date-time"},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "role"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1}
+      }
+    },
+    "event_type": {"type": "string", "minLength": 1},
+    "tool_name": {"type": ["string", "null"]},
+    "model_provider": {"type": ["string", "null"]},
+    "model_id": {"type": ["string", "null"]},
+    "prompt_template_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "retrieved_artifact_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "redacted_arguments_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "output_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+    "previous_entry_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "payload_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "policy_decision": {"type": "string", "enum": ["allow", "deny", "needs_review"]},
+    "approval_id": {"type": ["string", "null"], "format": "uuid"},
+    "execution_result": {"type": ["object", "null"]},
+    "entry_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

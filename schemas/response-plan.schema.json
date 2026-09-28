@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causalforge.dev/schemas/response-plan.schema.json",
+  "title": "CausalForge typed response plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "case_id", "tenant_id", "status", "actions"],
+  "$defs": {
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "action_type",
+        "target",
+        "target_scope",
+        "preconditions",
+        "expected_effects",
+        "service_invariants",
+        "rollback",
+        "approval_class",
+        "idempotency_key"
+      ],
+      "properties": {
+        "action_id": {"type": "string", "format": "uuid"},
+        "action_type": {
+          "type": "string",
+          "enum": [
+            "snapshot_case_state",
+            "revoke_test_rbac_binding",
+            "apply_test_network_policy",
+            "pause_test_deployment",
+            "restore_test_resource"
+          ]
+        },
+        "target": {"type": "object", "minProperties": 1},
+        "target_scope": {"type": "string", "minLength": 1},
+        "preconditions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "expected_effects": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "service_invariants": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "rollback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["available", "procedure"],
+          "properties": {
+            "available": {"type": "boolean"},
+            "procedure": {"type": "string", "minLength": 1}
+          }
+        },
+        "approval_class": {
+          "type": "string",
+          "enum": ["read_only", "lab_safe", "availability_impacting", "production_change"]
+        },
+        "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 255}
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "plan_id": {"type": "string", "format": "uuid"},
+    "case_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "status": {
+      "type": "string",
+      "enum": ["candidate", "simulated", "awaiting_approval", "approved", "rejected", "executed", "rolled_back"]
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/action"}
+    },
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshot_hash",
+        "attack_path_blocked",
+        "legitimate_paths_broken",
+        "residual_risk",
+        "reversible",
+        "policy_violations",
+        "confidence"
+      ],
+      "properties": {
+        "snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "attack_path_blocked": {"type": "boolean"},
+        "legitimate_paths_broken": {"type": "array", "items": {"type": "string"}},
+        "residual_risk": {"type": "number", "minimum": 0, "maximum": 1},
+        "reversible": {"type": "boolean"},
+        "policy_violations": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}

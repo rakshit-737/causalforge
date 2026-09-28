@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Build and coverage output
+build/
+dist/
+htmlcov/
+.coverage
+coverage.xml
+
+# Application data and local services
+*.sqlite3
+*.db
+postgres-data/
+redis-data/
+reports/local/
+
+# Frontend
+node_modules/
+.vite/
+
+# IDE/OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Graphify generated analysis is local developer output.
+graphify-out/

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causalforge.dev/schemas/canonical-event.schema.json",
+  "title": "CausalForge canonical event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "tenant_id",
+    "source",
+    "observed_at",
+    "ingested_at",
+    "actor",
+    "action",
+    "object",
+    "outcome",
+    "attributes",
+    "coverage",
+    "raw_payload_sha256",
+    "parser_version"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "ingested_at": {"type": "string", "format": "date-time"},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1}
+      }
+    },
+    "action": {"type": "string", "minLength": 1},
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "namespace": {"type": ["string", "null"]},
+        "name": {"type": ["string", "null"]},
+        "uid": {"type": ["string", "null"]}
+      }
+    },
+    "outcome": {"type": "string", "enum": ["allowed", "denied", "error", "unknown"]},
+    "attributes": {"type": "object"},
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_complete_for_window", "window_start", "window_end"],
+      "properties": {
+        "source_complete_for_window": {"type": "boolean"},
+        "window_start": {"type": "string", "format": "date-time"},
+        "window_end": {"type": "string", "format": "date-time"}
+      }
+    },
+    "raw_payload_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "parser_version": {"type": "string", "minLength": 1}
+  }
+}

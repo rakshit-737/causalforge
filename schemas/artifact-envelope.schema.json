@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causalforge.dev/schemas/artifact-envelope.schema.json",
+  "title": "CausalForge artifact envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_id",
+    "tenant_id",
+    "case_id",
+    "trace_id",
+    "producer",
+    "created_at",
+    "input_artifact_ids",
+    "payload",
+    "payload_sha256",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "artifact_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "case_id": {"type": "string", "format": "uuid"},
+    "trace_id": {"type": "string", "format": "uuid"},
+    "producer": {"type": "string", "minLength": 1, "maxLength": 120},
+    "created_at": {"type": "string", "format": "date-time"},
+    "input_artifact_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "payload": {"type": "object"},
+    "payload_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 255}
+  }
+}

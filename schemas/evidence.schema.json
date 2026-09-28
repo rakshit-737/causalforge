@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causalforge.dev/schemas/evidence.schema.json",
+  "title": "CausalForge evidence item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_id",
+    "case_id",
+    "tenant_id",
+    "source",
+    "observed_at",
+    "collected_at",
+    "parser_version",
+    "content_hash",
+    "redaction_profile",
+    "coverage",
+    "normalized",
+    "source_reliability",
+    "source_family"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "evidence_id": {"type": "string", "format": "uuid"},
+    "case_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "parser_version": {"type": "string", "minLength": 1},
+    "content_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "redaction_profile": {"type": "string", "minLength": 1},
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_complete_for_window", "window_start", "window_end"],
+      "properties": {
+        "source_complete_for_window": {"type": "boolean"},
+        "window_start": {"type": "string", "format": "date-time"},
+        "window_end": {"type": "string", "format": "date-time"}
+      }
+    },
+    "normalized": {"type": "object"},
+    "raw_reference": {"type": ["string", "null"]},
+    "source_reliability": {"type": "number", "minimum": 0, "maximum": 1},
+    "source_family": {"type": "string", "minLength": 1}
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causalforge.dev/schemas/claim.schema.json",
+  "title": "CausalForge evidence-bound claim",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_id",
+    "case_id",
+    "tenant_id",
+    "subject",
+    "predicate",
+    "object",
+    "status",
+    "supporting_evidence_ids",
+    "contradictory_evidence_ids",
+    "confidence_components",
+    "temporal_consistency",
+    "source_families",
+    "coverage_sufficient"
+  ],
+  "properties": {
+    "schema_version": {"type": "string", "const": "1.0"},
+    "claim_id": {"type": "string", "format": "uuid"},
+    "case_id": {"type": "string", "format": "uuid"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "subject": {"type": "string", "minLength": 1},
+    "predicate": {"type": "string", "minLength": 1},
+    "object": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "object"},
+        {"type": "null"}
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "observed",
+        "derived",
+        "hypothesized",
+        "corroborated",
+        "verified",
+        "disputed",
+        "rejected",
+        "unknown"
+      ]
+    },
+    "supporting_evidence_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "contradictory_evidence_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "format": "uuid"}
+    },
+    "confidence_components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_reliability",
+        "temporal_consistency",
+        "coverage",
+        "contradiction_penalty",
+        "final"
+      ],
+      "properties": {
+        "source_reliability": {"type": "number", "minimum": 0, "maximum": 1},
+        "temporal_consistency": {"type": "number", "minimum": 0, "maximum": 1},
+        "coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "contradiction_penalty": {"type": "number", "minimum": 0, "maximum": 1},
+        "final": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "temporal_consistency": {"type": "boolean"},
+    "source_families": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "coverage_sufficient": {"type": "boolean"}
+  }
+}
