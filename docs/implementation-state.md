@@ -57,6 +57,9 @@
 - Exposed tenant-scoped hypothesis creation/listing and durable verification-attempt API endpoints.
 - Added deterministic claim verification with explicit `verified`, `unknown`, and `disputed`
   outcomes, durable attempt records, and API history endpoints.
+- Hardened verification so independent source families must be server-attested, observed claim
+  semantics must match the canonical event, and free-text hypotheses remain
+  `insufficient_evidence` until a semantic verifier evaluates required/disconfirming evidence.
 - Bound evidence integrity to the canonical event's tenant, source, parser, timestamps, coverage,
   and content hash before workflow evaluation.
 

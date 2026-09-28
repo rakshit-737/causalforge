@@ -56,12 +56,14 @@ POST /api/v1/incidents/{incident_id}/claims/{claim_id}/verify
 GET  /api/v1/incidents/{incident_id}/claims/{claim_id}/verifications
 ```
 
-Claims expose evidence IDs and explicit states. The current API does not promote claims to
-`verified` or execute response actions. Hypotheses are persisted as `proposed` until a separate
-verification request evaluates integrity-checked case evidence. Verification requires two
-independent source families and complete coverage by default; deadline or evidence-budget failures
-return explicit `insufficient_evidence` rather than best-effort support. Each attempt is persisted
-with its evidence IDs, source families, policy, and unmet requirements.
+Claims expose evidence IDs and explicit states. The API does not promote claims to `verified` or
+execute response actions because submitted API telemetry has no server-owned source attestation.
+Hypotheses are persisted as `proposed` until a separate verification request evaluates
+integrity-checked case evidence; free-text hypotheses remain `insufficient_evidence` until a future
+semantic verifier exists. Verification requires two independent, server-attested source families
+and complete coverage by default; deadline or evidence-budget failures return explicit
+`insufficient_evidence` rather than best-effort support. Each attempt is persisted with its
+evidence IDs, source families, policy, and unmet requirements.
 
 Claim verification uses the same gates and additionally gives explicit contradictory evidence
 precedence: a cited contradiction produces `disputed`, insufficient support produces `unknown`,
@@ -88,6 +90,6 @@ Use the returned incident ID as `case_id` for `/api/v1/events/batch`. The OpenAP
 - Tenant mismatch inside an event payload: `422` and no committed records.
 - Malformed canonical event: `422` with a generic safe detail.
 - Foreign incident or hypothesis lookup: `404` without cross-tenant disclosure.
-- Insufficient verification coverage, source independence, deadline, or budget: `201` with a
-  durable `insufficient_evidence` decision, not a promoted conclusion.
+- Insufficient verification coverage, source independence, semantic support, deadline, or budget:
+  `201` with a durable `insufficient_evidence` decision, not a promoted conclusion.
 - No arbitrary shell, target connector, write action, or LLM tool is exposed by these endpoints.

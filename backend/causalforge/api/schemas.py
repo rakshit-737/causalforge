@@ -1,7 +1,7 @@
 """Versioned API request and response contracts."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -143,8 +143,8 @@ class VerificationRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    minimum_independent_source_families: int = Field(default=2, ge=1, le=20)
-    require_complete_coverage: bool = True
+    minimum_independent_source_families: int = Field(default=2, ge=2, le=20, strict=True)
+    require_complete_coverage: Literal[True] = True
     max_evidence_items: int = Field(default=100, ge=1, le=10_000)
     deadline: datetime | None = None
 

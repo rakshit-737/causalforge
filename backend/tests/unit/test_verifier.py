@@ -7,7 +7,12 @@ from causalforge.domain.claims import Claim, ConfidenceComponents
 from causalforge.domain.evidence import EvidenceItem
 from causalforge.domain.hypotheses import Hypothesis, RiskAssessment
 from causalforge.ingestion.normalizer import normalize_event
-from causalforge.workflow.verifier import VerificationPolicy, verify_claim, verify_hypothesis
+from causalforge.workflow.verifier import (
+    TrustedSource,
+    VerificationPolicy,
+    verify_claim,
+    verify_hypothesis,
+)
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000010")
 CASE_ID = UUID("00000000-0000-0000-0000-000000000020")
@@ -99,11 +104,11 @@ def test_verifier_requires_independent_source_families() -> None:
     )
 
     assert decision.status == "insufficient_evidence"
-    assert decision.unmet_requirements == ("independent_source_families",)
+    assert "independent_source_families" in decision.unmet_requirements
     assert decision.supporting_evidence_ids
 
 
-def test_verifier_supports_complete_independent_observations() -> None:
+def test_hypothesis_verifier_never_promotes_free_text_without_semantic_evaluation() -> None:
     first_id = uuid4()
     second_id = uuid4()
     decision = verify_hypothesis(
@@ -115,10 +120,11 @@ def test_verifier_supports_complete_independent_observations() -> None:
         now=datetime(2026, 9, 28, 11, tzinfo=UTC),
     )
 
-    assert decision.status == "supported"
+    assert decision.status == "insufficient_evidence"
     assert decision.coverage_sufficient is True
     assert decision.temporal_consistency is True
-    assert decision.source_families == ("kubernetes_audit", "runtime_sensor")
+    assert decision.source_families == ()
+    assert "semantic_verification_required" in decision.unmet_requirements
 
 
 def test_verifier_preserves_unknown_when_coverage_is_incomplete() -> None:
@@ -180,6 +186,20 @@ def test_claim_verifier_promotes_only_independent_complete_support() -> None:
         claim_for((first, second)),
         [first, second],
         now=datetime(2026, 9, 28, 11, tzinfo=UTC),
+        trusted_sources=(
+            TrustedSource(
+                kind="kubernetes_audit",
+                name="fixture",
+                version="1.0",
+                independent_family="control_plane",
+            ),
+            TrustedSource(
+                kind="runtime_sensor",
+                name="fixture",
+                version="1.0",
+                independent_family="runtime",
+            ),
+        ),
     )
 
     assert decision.status == "verified"
@@ -204,3 +224,26 @@ def test_claim_verifier_marks_contradictions_disputed_and_single_source_unknown(
     assert disputed.contradictory_evidence_ids == (contradictory.evidence_id,)
     assert unknown.status == "unknown"
     assert "independent_source_families" in unknown.unmet_requirements
+
+
+def test_claim_verifier_does_not_promote_mismatched_event_semantics() -> None:
+    item = evidence(event_id=uuid4(), source_kind="kubernetes_audit")
+    claim = claim_for((item,)).model_copy(update={"predicate": "exfiltrated secret"})
+
+    decision = verify_claim(
+        claim,
+        [item],
+        policy=VerificationPolicy(minimum_independent_source_families=2),
+        now=datetime(2026, 9, 28, 11, tzinfo=UTC),
+        trusted_sources=(
+            TrustedSource(
+                kind="kubernetes_audit",
+                name="fixture",
+                version="1.0",
+                independent_family="control_plane",
+            ),
+        ),
+    )
+
+    assert decision.status == "unknown"
+    assert "claim_semantics" in decision.unmet_requirements
