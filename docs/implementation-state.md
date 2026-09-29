@@ -67,13 +67,17 @@
   content hash, and complete provenance-envelope hash before workflow evaluation (`0009`).
 - Confined the development principal adapter to direct loopback requests without forwarding headers;
   added real SQLite rollback/savepoint and concurrent-writer regression coverage.
+- Added a deterministic typed evidence planner with allowlisted collector capabilities, bounded
+  budgets/deadlines, stable artifact identities, and hash-only diagnostics for unknown requirements.
+- Added a local `FixtureCollector` that normalizes finite fixture payloads, enforces tenant/source/
+  deadline/item scope, and returns server-owned source attestations without external side effects.
 
 ## Tests run
 
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 109 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 118 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -104,13 +108,14 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
   exists yet. Claim contradictions must currently be explicitly cited by a workflow caller.
 - API-submitted telemetry has no server-owned source attestation, so API claim verification remains
   `unknown`; a trusted collector integration is required before the API can promote a claim.
+- The attested collector is fixture-only and returns canonical events in memory; it does not yet
+  persist collected evidence, append audit entries, or connect the API planner to a durable worker.
 
 ## Next smallest task
 
-Implement the trusted collector/broker and semantic verifier boundary: server-owned source
-attestations, typed read-only collection, evidence planning, contradiction discovery, and a
-coordinator that can promote only narrowly supported observed claims while preserving explicit
-`INSUFFICIENT_EVIDENCE` outcomes.
+Implement the durable coordinator/broker boundary: persist plans and collection receipts, append
+audit entries, wire the fixture collector through a read-only API path, and preserve explicit
+`INSUFFICIENT_EVIDENCE` outcomes for incomplete or semantically unsupported claims.
 
 ## Architectural constraints carried forward
 
