@@ -4,7 +4,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from causalforge.domain.hypotheses import Hypothesis, RiskAssessment
-from causalforge.workflow.planner import PlannerPolicy, plan_evidence
+from causalforge.workflow.planner import (
+    EvidencePlan,
+    EvidenceRequest,
+    EvidenceSelector,
+    PlannerPolicy,
+    plan_evidence,
+)
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000010")
 CASE_ID = UUID("00000000-0000-0000-0000-000000000020")
@@ -78,3 +84,40 @@ def test_planner_rejects_naive_clock_and_enforces_policy_bounds() -> None:
         PlannerPolicy(max_requests=0)
     with pytest.raises(ValueError):
         PlannerPolicy(deadline_seconds=901)
+
+
+def test_planner_marks_disconfirming_requirements_and_merges_same_capability() -> None:
+    plan = plan_evidence(
+        hypothesis("audit event", "kubernetes audit"),
+        now=datetime(2026, 9, 29, 10, 0, tzinfo=UTC),
+    )
+
+    assert plan.status == "planned"
+    assert len(plan.requests) == 1
+    assert plan.requests[0].intent == "support"
+
+    disconfirming = hypothesis().model_copy(
+        update={"disconfirming_evidence": ("audit event",)}
+    )
+    disconfirming_plan = plan_evidence(
+        disconfirming, now=datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
+    )
+    assert disconfirming_plan.requests[0].intent == "disconfirm"
+
+
+def test_typed_request_and_plan_reject_scope_or_capability_tampering() -> None:
+    with pytest.raises(ValueError):
+        EvidenceRequest(
+            request_id=uuid4(),
+            collector_kind="rbac_snapshot",
+            source_family="kubernetes_audit",
+            purpose="audit_event",
+            selector=EvidenceSelector(source_kind="kubernetes_audit"),
+            max_items=1,
+        )
+
+    plan = plan_evidence(hypothesis("audit event"), now=datetime(2026, 9, 29, 10, 0, tzinfo=UTC))
+    tampered = plan.model_dump(mode="json")
+    tampered["tenant_id"] = str(uuid4())
+    with pytest.raises(ValueError):
+        EvidencePlan.model_validate(tampered)
