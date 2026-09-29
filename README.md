@@ -19,10 +19,11 @@ reachability utilities, a scoped Sigma subset, bounded event correlation, and a 
 engine, provider-neutral structured-output boundary, deterministic rule-only fallback,
 prompt-injection-safe context builder, tenant-scoped local knowledge retrieval, and a local
 principal-verified investigation API. It also includes a deterministic, offline compromised
-`orders-api` fixture and generated evidence-bound report. The durable agent workflow, UI, and
-bounded hypothesis verifier are present; collector planning, UI, and response execution remain
-later phases. Claims can also be deterministically promoted to `verified`, or remain `unknown`/
-`disputed`, through explicit evidence gates.
+`orders-api` fixture and generated evidence-bound report. The durable agent workflow, UI, bounded
+hypothesis verifier, typed evidence planner, and fixture-only attested collector are present;
+durable coordination, UI, and response execution remain later phases. Claims can also be
+deterministically promoted to `verified`, or remain `unknown`/`disputed`, through explicit evidence
+gates.
 
 ## Design invariants
 
