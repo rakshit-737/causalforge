@@ -245,6 +245,29 @@ class DurableFixtureWorkflow:
             replayed=False,
         )
 
+    def load(
+        self,
+        session: Session,
+        *,
+        tenant_id: UUID,
+        case_id: UUID,
+        hypothesis_id: UUID,
+        run_id: UUID,
+    ) -> DurableWorkflowResult | None:
+        """Load one run only when every caller-supplied scope matches."""
+
+        run = session.scalar(
+            select(WorkflowRunRecord).where(
+                WorkflowRunRecord.id == str(run_id),
+                WorkflowRunRecord.tenant_id == str(tenant_id),
+                WorkflowRunRecord.case_id == str(case_id),
+                WorkflowRunRecord.hypothesis_id == str(hypothesis_id),
+            )
+        )
+        if run is None:
+            return None
+        return self._snapshot(session, run, replayed=False)
+
     def _snapshot(
         self,
         session: Session,
