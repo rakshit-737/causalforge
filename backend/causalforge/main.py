@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from causalforge.api.routes_events import router as events_router
 from causalforge.api.routes_health import router as health_router
 from causalforge.api.routes_incidents import router as incidents_router
+from causalforge.api.routes_workflows import router as workflows_router
 from causalforge.config import Settings, get_settings
 from causalforge.detection.sigma_engine import load_rules
 from causalforge.observability.logging import configure_logging, get_logger
@@ -99,6 +100,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(events_router)
     app.include_router(incidents_router)
+    app.include_router(workflows_router)
     return app
 
 
