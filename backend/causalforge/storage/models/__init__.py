@@ -12,12 +12,14 @@ from causalforge.storage.models.hypothesis import HypothesisRecord, Verification
 from causalforge.storage.models.incident import IncidentRecord
 from causalforge.storage.models.tenant import Tenant
 from causalforge.storage.models.user import User
+from causalforge.storage.models.workflow import CollectionReceiptRecord, WorkflowRunRecord
 
 __all__ = [
     "AuditEntryRecord",
     "Base",
     "ClaimRecord",
     "ClaimVerificationRecord",
+    "CollectionReceiptRecord",
     "DetectionRecord",
     "DocumentChunkRecord",
     "DocumentRecord",
@@ -28,4 +30,5 @@ __all__ = [
     "Tenant",
     "User",
     "VerificationRecord",
+    "WorkflowRunRecord",
 ]
