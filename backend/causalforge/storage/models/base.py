@@ -8,7 +8,7 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.types import TypeDecorator
 
-SCHEMA_REVISION = "0010_durable_workflow"
+SCHEMA_REVISION = "0011_workflow_snapshots"
 
 
 class UTCDateTime(TypeDecorator[datetime]):
