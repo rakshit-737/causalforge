@@ -7,6 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from causalforge.domain.hypotheses import RiskAssessment
+from causalforge.workflow.coordinator import CollectionReceipt
+from causalforge.workflow.planner import EvidencePlan
 
 
 class EventIngestRequest(BaseModel):
@@ -238,6 +240,45 @@ class InvestigationResponse(BaseModel):
     claim_count: int
     correlations_count: int
     detections: list[DetectionResponse]
+
+
+class FixtureWorkflowRequest(BaseModel):
+    """Bounded local fixture input for one durable read-only workflow run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    parser_version: str = Field(min_length=1, max_length=120)
+    events: list[dict[str, Any]] = Field(min_length=1, max_length=100)
+
+    @field_validator("idempotency_key", "parser_version")
+    @classmethod
+    def require_non_whitespace(cls, value: str) -> str:
+        if value.strip() != value or not value.strip():
+            raise ValueError("workflow string fields must not have surrounding whitespace")
+        return value
+
+
+class WorkflowRunResponse(BaseModel):
+    """Durable, provenance-only response for a fixture workflow run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    run_id: UUID
+    tenant_id: UUID
+    case_id: UUID
+    hypothesis_id: UUID
+    idempotency_key: str
+    status: str
+    plan: EvidencePlan
+    receipts: list[CollectionReceipt]
+    event_ids: list[UUID]
+    evidence_ids: list[UUID]
+    unmet_requirements: list[str]
+    started_at: datetime
+    completed_at: datetime
+    result_hash: str
+    replayed: bool
 
 
 class GraphResponse(BaseModel):
