@@ -19,6 +19,7 @@ def test_initial_alembic_migration_creates_phase1_tables(tmp_path, monkeypatch) 
             "audit_entries",
             "claims",
             "claim_verification_records",
+            "collection_receipts",
             "detections",
             "document_chunks",
             "documents",
@@ -29,6 +30,7 @@ def test_initial_alembic_migration_creates_phase1_tables(tmp_path, monkeypatch) 
             "tenants",
             "users",
             "verification_records",
+            "workflow_runs",
         }
     finally:
         engine.dispose()
