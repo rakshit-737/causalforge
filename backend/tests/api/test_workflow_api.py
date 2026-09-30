@@ -113,12 +113,21 @@ def test_workflow_run_is_durable_and_idempotent(tmp_path) -> None:
     assert replay.json()["evidence_ids"] == body["evidence_ids"]
     assert replay.json()["replayed"] is True
 
+    second_run = client.post(
+        f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/workflow-runs",
+        headers=headers(tenant_id, "alice"),
+        json={**request, "idempotency_key": "fixture-run-2"},
+    )
+    assert second_run.status_code == 201
+    assert second_run.json()["run_id"] != body["run_id"]
+    assert second_run.json()["receipts"][0]["run_id"] == second_run.json()["run_id"]
+
     listed = client.get(
         f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/workflow-runs",
         headers=headers(tenant_id, "alice"),
     )
     assert listed.status_code == 200
-    assert len(listed.json()) == 1
+    assert len(listed.json()) == 2
     fetched = client.get(
         f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/workflow-runs/{body['run_id']}",
         headers=headers(tenant_id, "alice"),
@@ -190,3 +199,34 @@ def test_workflow_reports_insufficient_evidence_without_guessing_scope(tmp_path)
     assert response.json()["status"] == "insufficient_evidence"
     assert response.json()["evidence_ids"] == []
     assert "fixture_scope_or_provenance" in response.json()["unmet_requirements"]
+
+
+def test_workflow_rejects_tampered_persisted_result(tmp_path) -> None:
+    client, tenant_id, _ = make_client(tmp_path)
+    case_id, hypothesis_id = create_target(client, tenant_id, "alice")
+    response = client.post(
+        f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/workflow-runs",
+        headers=headers(tenant_id, "alice"),
+        json={
+            "idempotency_key": "tamper-check",
+            "parser_version": "fixture-1.0",
+            "events": [fixture_event(tenant_id)],
+        },
+    )
+    assert response.status_code == 201
+
+    from causalforge.storage.models import WorkflowRunRecord
+
+    app = client.app
+    with app.state.database.session() as session:
+        record = session.get(WorkflowRunRecord, response.json()["run_id"])
+        assert record is not None
+        record.result_hash = "0" * 64
+        session.commit()
+
+    fetched = client.get(
+        f"/api/v1/incidents/{case_id}/hypotheses/{hypothesis_id}/workflow-runs/{response.json()['run_id']}",
+        headers=headers(tenant_id, "alice"),
+    )
+    assert fetched.status_code == 409
+    assert fetched.json() == {"detail": "workflow state failed integrity checks"}
