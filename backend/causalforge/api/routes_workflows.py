@@ -20,7 +20,6 @@ from causalforge.storage.models import (
     IncidentRecord,
     WorkflowRunRecord,
 )
-from causalforge.workflow.coordinator import CollectionReceipt
 from causalforge.workflow.service import (
     DurableFixtureWorkflow,
     DurableWorkflowResult,
@@ -49,28 +48,6 @@ def _scoped_hypothesis(
 
 def _workflow_response(snapshot: DurableWorkflowResult) -> WorkflowRunResponse:
     try:
-        receipts = [
-            CollectionReceipt.model_validate(
-                {
-                    "schema_version": "1.0",
-                    "receipt_id": record.id,
-                    "request_id": record.request_id,
-                    "tenant_id": record.tenant_id,
-                    "case_id": record.case_id,
-                    "hypothesis_id": record.hypothesis_id,
-                    "collector_kind": record.collector_kind,
-                    "status": record.status,
-                    "trusted_source": record.trusted_source,
-                    "event_ids": record.event_ids,
-                    "collected_at": record.collected_at,
-                    "consumed_items": record.consumed_items,
-                    "rejected_items": record.rejected_items,
-                    "unmet_requirements": record.unmet_requirements,
-                    "receipt_hash": record.receipt_hash,
-                }
-            )
-            for record in snapshot.receipts
-        ]
         from causalforge.workflow.planner import EvidencePlan
 
         plan = EvidencePlan.model_validate(snapshot.run.plan)
@@ -82,7 +59,7 @@ def _workflow_response(snapshot: DurableWorkflowResult) -> WorkflowRunResponse:
             idempotency_key=snapshot.run.idempotency_key,
             status=snapshot.run.status,
             plan=plan,
-            receipts=receipts,
+            receipts=list(snapshot.receipts),
             event_ids=list(snapshot.event_ids),
             evidence_ids=list(snapshot.evidence_ids),
             unmet_requirements=list(snapshot.run.unmet_requirements),
