@@ -10,6 +10,10 @@ It is intentionally **not** a SIEM, EDR, vulnerability scanner, generic SOC chat
 autonomous penetration-testing agent. AI may propose hypotheses and plans, but deterministic
 verification and policy controls decide what can be called verified or executed.
 
+**Related topics:** cybersecurity · cloud-native security · Kubernetes · incident response · threat
+detection · security automation · digital forensics · evidence provenance · Sigma rules · temporal
+graphs · FastAPI · Python
+
 ## Current checkpoint
 
 The repository is at **Phase 4 — deterministic investigation API**. It contains the versioned domain
@@ -24,6 +28,9 @@ hypothesis verifier, typed evidence planner, and fixture-only attested collector
 durable coordination, UI, and response execution remain later phases. Claims can also be
 deterministically promoted to `verified`, or remain `unknown`/`disputed`, through explicit evidence
 gates.
+
+The current workflow also includes a pure fixture coordinator that emits tamper-evident collection
+receipts without external side effects. See [docs/coordinator.md](docs/coordinator.md).
 
 ## Design invariants
 
