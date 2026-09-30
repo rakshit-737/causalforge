@@ -2,7 +2,7 @@
 
 ## Current phase
 
-**Phase 4 — deterministic investigation API checkpoint**
+**Phase 4 — deterministic investigation API with durable fixture workflow**
 
 ## Completed in this checkpoint
 
@@ -71,13 +71,20 @@
   budgets/deadlines, stable artifact identities, and hash-only diagnostics for unknown requirements.
 - Added a local `FixtureCollector` that normalizes finite fixture payloads, enforces tenant/source/
   deadline/item scope, and returns server-owned source attestations without external side effects.
+- Added durable workflow-run and collection-receipt persistence (`0010`), integrity snapshots and
+  evidence bindings (`0011`), and a transactional fixture coordinator service.
+- Added tenant-scoped workflow API endpoints with bounded request size, replay-safe idempotency keys,
+  server-owned fixture trust, explicit `insufficient_evidence` outcomes, and integrity-checked reads.
+- Added workflow audit entries, event/evidence persistence, and SQLite rollback/concurrency tests;
+  different idempotency keys receive distinct run/receipt identities while event/evidence replay
+  remains idempotent.
 
 ## Tests run
 
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 118 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 127 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
@@ -89,8 +96,8 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
 
 ## Known limitations
 
-- No durable worker, UI, or browser UI exists yet; the current lab artifact is an offline Python
-  fixture and report, not a Kubernetes runtime.
+- No background worker, UI, or browser UI exists yet; the current workflow API is a synchronous,
+  bounded local-fixture path, not a Kubernetes runtime or external collector broker.
 - Remote ATT&CK/STIX ingestion and vector retrieval are not implemented yet; local approved
   Markdown retrieval is deterministic and tenant-scoped.
 - PostgreSQL and Redis containers are declared but were not started in this environment because
@@ -104,18 +111,20 @@ uv run --extra dev python -m pip_audit --local  # no known vulnerabilities
 - The local principal adapter is a development identity check, not production authentication or
   authorization middleware; production token verification and secret management remain open.
 - Hypothesis verification is evidence-bound but currently evaluates already-collected evidence;
-  no collector broker, durable planner, retry/deadline worker, or automatic contradiction matcher
-  exists yet. Claim contradictions must currently be explicitly cited by a workflow caller.
+  the durable fixture workflow does not yet provide a background retry/deadline worker or automatic
+  contradiction matcher. Claim contradictions must currently be explicitly cited by a workflow
+  caller.
 - API-submitted telemetry has no server-owned source attestation, so API claim verification remains
   `unknown`; a trusted collector integration is required before the API can promote a claim.
-- The attested collector is fixture-only and returns canonical events in memory; it does not yet
-  persist collected evidence, append audit entries, or connect the API planner to a durable worker.
+- The attested collector remains fixture-only. It now persists canonical events, evidence, receipts,
+  snapshots, bindings, and audit entries through the bounded API path; trusted Kubernetes, RBAC, and
+  runtime collectors are still future integrations.
 
 ## Next smallest task
 
-Implement the durable coordinator/broker boundary: persist plans and collection receipts, append
-audit entries, wire the fixture collector through a read-only API path, and preserve explicit
-`INSUFFICIENT_EVIDENCE` outcomes for incomplete or semantically unsupported claims.
+Add a durable worker abstraction for queued read-only collection with the same tenant, deadline,
+budget, idempotency, audit, and fail-closed invariants; keep external connectors disabled until
+each source has a server-owned attestation and fixture-backed contract tests.
 
 ## Architectural constraints carried forward
 
