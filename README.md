@@ -24,13 +24,15 @@ engine, provider-neutral structured-output boundary, deterministic rule-only fal
 prompt-injection-safe context builder, tenant-scoped local knowledge retrieval, and a local
 principal-verified investigation API. It also includes a deterministic, offline compromised
 `orders-api` fixture and generated evidence-bound report. The durable agent workflow, UI, bounded
-hypothesis verifier, typed evidence planner, and fixture-only attested collector are present;
-durable coordination, UI, and response execution remain later phases. Claims can also be
+hypothesis verifier, typed evidence planner, fixture-only attested collector, and durable
+read-only fixture workflow API are present; background workers, UI, and response execution remain
+later phases. Claims can also be
 deterministically promoted to `verified`, or remain `unknown`/`disputed`, through explicit evidence
 gates.
 
-The current workflow also includes a pure fixture coordinator that emits tamper-evident collection
-receipts without external side effects. See [docs/coordinator.md](docs/coordinator.md).
+The current workflow includes a pure fixture coordinator plus a transactional persistence boundary
+that emits tamper-evident collection receipts without external side effects. See
+[docs/coordinator.md](docs/coordinator.md).
 
 ## Design invariants
 
