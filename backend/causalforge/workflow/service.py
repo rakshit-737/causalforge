@@ -18,6 +18,8 @@ from causalforge.storage.models import (
     CollectionReceiptRecord,
     EventRecord,
     EvidenceRecord,
+    HypothesisRecord,
+    IncidentRecord,
     WorkflowRunRecord,
 )
 from causalforge.storage.repositories.evidence import EvidenceRepository
@@ -69,6 +71,7 @@ def _request_hash(
     parser_version: str,
     planner_policy: PlannerPolicy,
     trusted_source: TrustedSource,
+    hypothesis: Hypothesis,
 ) -> str:
     return sha256_hex(
         {
@@ -76,6 +79,7 @@ def _request_hash(
             "payloads": [dict(payload) for payload in payloads],
             "planner_policy": planner_policy.model_dump(mode="json"),
             "trusted_source": trusted_source.model_dump(mode="json"),
+            "hypothesis": hypothesis.model_dump(mode="json", exclude={"status"}),
         }
     )
 
@@ -109,8 +113,20 @@ class DurableFixtureWorkflow:
     ) -> DurableWorkflowResult:
         """Execute one tenant-scoped, fixture-only workflow with replay protection."""
 
-        if hypothesis.tenant_id is None or hypothesis.case_id is None:
-            raise WorkflowStateError("hypothesis scope is incomplete")
+        hypothesis = Hypothesis.model_validate(hypothesis.model_dump(mode="json"))
+        incident = session.scalar(select(IncidentRecord).where(
+            IncidentRecord.id == str(hypothesis.case_id),
+            IncidentRecord.tenant_id == str(hypothesis.tenant_id),
+        ))
+        # Serialize runs for one hypothesis on PostgreSQL. SQLite's Database boundary
+        # starts BEGIN IMMEDIATE, so the same path is serialized locally as well.
+        target = session.scalar(select(HypothesisRecord).where(
+            HypothesisRecord.id == str(hypothesis.hypothesis_id),
+            HypothesisRecord.tenant_id == str(hypothesis.tenant_id),
+            HypothesisRecord.incident_id == str(hypothesis.case_id),
+        ).with_for_update())
+        if incident is None or target is None or target.to_hypothesis() != hypothesis:
+            raise WorkflowStateError("workflow target does not match persisted scope")
         if (
             not idempotency_key
             or len(idempotency_key) > 128
@@ -127,6 +143,7 @@ class DurableFixtureWorkflow:
             parser_version=parser_version,
             planner_policy=effective_policy,
             trusted_source=trusted_source,
+            hypothesis=hypothesis,
         )
         existing = session.scalar(
             select(WorkflowRunRecord).where(
@@ -153,13 +170,24 @@ class DurableFixtureWorkflow:
             now=started_at,
             run_identity=idempotency_key,
         )
-        run_record = WorkflowRunRecord.from_result(
-            result,
-            idempotency_key=idempotency_key,
-            request_hash=request_hash,
-        )
-        session.add(run_record)
-        session.flush()
+        with session.begin_nested():
+            return self._persist(
+                session, result=result, hypothesis=hypothesis, actor=actor,
+                idempotency_key=idempotency_key, request_hash=request_hash,
+                trusted_source=trusted_source,
+            )
+
+    def _persist(
+        self,
+        session: Session,
+        *,
+        result: CoordinatorResult,
+        hypothesis: Hypothesis,
+        actor: Mapping[str, str],
+        idempotency_key: str,
+        request_hash: str,
+        trusted_source: TrustedSource,
+    ) -> DurableWorkflowResult:
         self.audit.append(
             session,
             tenant_id=hypothesis.tenant_id,
@@ -185,8 +213,10 @@ class DurableFixtureWorkflow:
             for receipt in result.receipts
             for event_id in receipt.event_ids
         }
+        bindings: list[dict[str, str]] = []
+        persisted_events: list[CanonicalEvent] = []
         for event in result.events:
-            self.ingestion.ingest_canonical(
+            ingested = self.ingestion.ingest_canonical(
                 session,
                 event=event,
                 case_id=hypothesis.case_id,
@@ -195,8 +225,34 @@ class DurableFixtureWorkflow:
                 source_family=trusted_source.independent_family,
                 actor=actor,
             )
+            evidence = ingested.evidence_record
+            if evidence is None:
+                raise WorkflowStateError("collected event has no durable evidence")
+            EvidenceRepository.verify_integrity(evidence)
+            persisted_events.append(ingested.normalized.event)
+            bindings.append({
+                "collected_event_id": str(event.event_id),
+                "persisted_event_id": str(ingested.normalized.event.event_id),
+                "evidence_id": evidence.id,
+                "content_hash": evidence.content_hash,
+                "provenance_hash": evidence.provenance_hash,
+            })
 
-        for receipt in result.receipts:
+        persisted_result = CoordinatorResult.model_validate(
+            {
+                **result.model_dump(mode="json"),
+                "events": [event.model_dump(mode="json") for event in persisted_events],
+            }
+        )
+        run_record = WorkflowRunRecord.from_result(
+            persisted_result,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
+        )
+        session.add(run_record)
+        session.flush()
+
+        for receipt in persisted_result.receipts:
             receipt_record = CollectionReceiptRecord.from_receipt(
                 receipt,
                 workflow_run_id=str(result.run_id),
@@ -226,7 +282,7 @@ class DurableFixtureWorkflow:
                 created_at=receipt.collected_at,
                 retrieved_artifact_ids=[str(value) for value in receipt.event_ids],
             )
-        if not result.receipts:
+        if not persisted_result.receipts:
             self.audit.append(
                 session,
                 tenant_id=hypothesis.tenant_id,
@@ -235,12 +291,20 @@ class DurableFixtureWorkflow:
                 event_type="workflow.collection.skipped",
                 payload={
                     "run_id": str(result.run_id),
-                    "status": result.status,
-                    "unmet_requirements": list(result.unmet_requirements),
+                    "status": persisted_result.status,
+                    "unmet_requirements": list(persisted_result.unmet_requirements),
                 },
                 policy_decision="allow",
-                created_at=result.completed_at,
+                created_at=persisted_result.completed_at,
             )
+        run_record.evidence_bindings = bindings
+        run_record.record_hash = run_record.integrity_hash()
+        self.audit.append(
+            session, tenant_id=hypothesis.tenant_id, case_id=hypothesis.case_id,
+            actor=actor, event_type="workflow.run.recorded", policy_decision="allow",
+            payload={"run_id": run_record.id, "record_hash": run_record.record_hash},
+            created_at=result.completed_at,
+        )
         session.flush()
         return self._snapshot(session, run_record, replayed=False)
 
@@ -274,6 +338,16 @@ class DurableFixtureWorkflow:
         *,
         replayed: bool,
     ) -> DurableWorkflowResult:
+        if (
+            run.result_snapshot is None
+            or run.evidence_bindings is None
+            or run.record_hash is None
+        ):
+            raise WorkflowStateError("stored workflow has no complete integrity envelope")
+        if run.record_hash != run.integrity_hash():
+            raise WorkflowStateError("stored workflow record hash mismatch")
+        if sha256_hex(run.result_snapshot) != run.result_hash:
+            raise WorkflowStateError("stored workflow snapshot hash mismatch")
         receipt_records = tuple(
             session.scalars(
                 select(CollectionReceiptRecord)
@@ -311,6 +385,7 @@ class DurableFixtureWorkflow:
             raise WorkflowStateError("stored workflow is missing a collected event")
         events = tuple(events_by_id[str(event_id)] for event_id in unique_event_ids)
         evidence_by_event: dict[str, UUID] = {}
+        evidence_rows_by_event: dict[str, EvidenceRecord] = {}
         evidence_rows = session.scalars(
             select(EvidenceRecord).where(
                 EvidenceRecord.tenant_id == run.tenant_id,
@@ -327,8 +402,26 @@ class DurableFixtureWorkflow:
                         "stored workflow maps an event to multiple evidence rows"
                     )
                 evidence_by_event[event_id] = UUID(evidence_row.id)
+                evidence_rows_by_event[event_id] = evidence_row
         if set(evidence_by_event) != wanted:
             raise WorkflowStateError("stored workflow is missing persisted evidence")
+        bindings_by_event: dict[str, dict[str, str]] = {}
+        for binding in run.evidence_bindings:
+            event_id = binding.get("collected_event_id")
+            if not event_id or event_id in bindings_by_event:
+                raise WorkflowStateError("stored workflow has invalid evidence bindings")
+            bindings_by_event[event_id] = binding
+        if set(bindings_by_event) != wanted:
+            raise WorkflowStateError("stored workflow evidence bindings are incomplete")
+        for event_id, binding in bindings_by_event.items():
+            evidence_row = evidence_rows_by_event[event_id]
+            if (
+                binding.get("persisted_event_id") != event_id
+                or binding.get("evidence_id") != evidence_row.id
+                or binding.get("content_hash") != evidence_row.content_hash
+                or binding.get("provenance_hash") != evidence_row.provenance_hash
+            ):
+                raise WorkflowStateError("stored workflow evidence binding mismatch")
         plan = EvidencePlan.model_validate(run.plan)
         trusted_sources: list[TrustedSource] = []
         for receipt in receipts:
@@ -354,6 +447,12 @@ class DurableFixtureWorkflow:
             raise WorkflowStateError("stored workflow result is invalid") from exc
         if sha256_hex(durable_result.model_dump(mode="json")) != run.result_hash:
             raise WorkflowStateError("stored workflow result hash mismatch")
+        try:
+            snapshot_result = CoordinatorResult.model_validate(run.result_snapshot)
+        except (TypeError, ValueError) as exc:
+            raise WorkflowStateError("stored workflow snapshot is invalid") from exc
+        if snapshot_result.model_dump(mode="json") != durable_result.model_dump(mode="json"):
+            raise WorkflowStateError("stored workflow snapshot does not match durable rows")
         return DurableWorkflowResult(
             run=run,
             receipts=receipts,
