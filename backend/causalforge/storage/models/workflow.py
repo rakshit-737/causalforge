@@ -37,6 +37,9 @@ class WorkflowRunRecord(Base):
     started_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     completed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     result_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    evidence_bindings: Mapped[list[dict[str, str]] | None] = mapped_column(JSON, nullable=True)
+    record_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, nullable=False)
 
     @classmethod
@@ -64,7 +67,21 @@ class WorkflowRunRecord(Base):
             started_at=result.started_at,
             completed_at=result.completed_at,
             result_hash=sha256_hex(payload),
+            result_snapshot=payload,
+            evidence_bindings=[],
         )
+
+    def integrity_hash(self) -> str:
+        """Bind replay metadata and evidence aliases to the immutable collection snapshot."""
+
+        return sha256_hex({
+            "run_id": self.id,
+            "idempotency_key": self.idempotency_key,
+            "request_hash": self.request_hash,
+            "result_hash": self.result_hash,
+            "result_snapshot": self.result_snapshot,
+            "evidence_bindings": self.evidence_bindings,
+        })
 
 
 class CollectionReceiptRecord(Base):
