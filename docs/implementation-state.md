@@ -84,7 +84,7 @@
 The focused Phase 4 checks now pass:
 
 ```text
-uv run --extra dev python -m pytest  # 127 passed on CPython 3.12
+uv run --extra dev python -m pytest  # 128 passed on CPython 3.12
 python -m compileall -q backend
 python -c "...Draft202012Validator.check_schema(...)..."  # 8 schemas pass
 uv run --extra dev python -m alembic -c backend/alembic.ini upgrade head
