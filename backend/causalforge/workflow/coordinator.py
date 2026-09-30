@@ -38,6 +38,7 @@ class CollectionReceipt(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal["1.0"]
+    run_id: UUID
     receipt_id: UUID
     request_id: UUID
     tenant_id: UUID
@@ -112,6 +113,23 @@ class CoordinatorResult(BaseModel):
             for event in self.events
         ):
             raise ValueError("coordinator returned a foreign-tenant event")
+        request_ids = {request.request_id for request in self.plan.requests}
+        receipt_request_ids = {receipt.request_id for receipt in self.receipts}
+        if len(receipt_request_ids) != len(self.receipts):
+            raise ValueError("coordinator returned duplicate collection receipts")
+        event_ids: set[UUID] = set()
+        for receipt in self.receipts:
+            if (
+                receipt.run_id != self.run_id
+                or receipt.tenant_id != self.tenant_id
+                or receipt.case_id != self.case_id
+                or receipt.hypothesis_id != self.hypothesis_id
+                or receipt.request_id not in request_ids
+            ):
+                raise ValueError("coordinator receipt scope mismatch")
+            if event_ids.intersection(receipt.event_ids):
+                raise ValueError("coordinator receipts contain duplicate event IDs")
+            event_ids.update(receipt.event_ids)
         if self.status == "completed" and self.unmet_requirements:
             raise ValueError("completed coordinator run cannot have unmet requirements")
         if self.status == "insufficient_evidence" and not self.unmet_requirements:
@@ -131,10 +149,21 @@ class FixtureCoordinator:
         trusted_source: TrustedSource,
         planner_policy: PlannerPolicy | None = None,
         now: datetime | None = None,
+        run_identity: str | None = None,
     ) -> CoordinatorResult:
         started_at = _now(now)
         plan = plan_evidence(hypothesis, policy=planner_policy, now=started_at)
-        run_id = uuid5(NAMESPACE_URL, f"causalforge:coordinator-run:{plan.plan_id}")
+        input_identity = run_identity or sha256_hex(
+            {
+                "parser_version": parser_version,
+                "payloads": [dict(payload) for payload in payloads],
+                "trusted_source": trusted_source.model_dump(mode="json"),
+            }
+        )
+        run_id = uuid5(
+            NAMESPACE_URL,
+            f"causalforge:coordinator-run:{plan.plan_id}:{input_identity}",
+        )
         unmet = list(plan.unmet_requirements)
         if plan.status != "planned":
             return self._result(
@@ -170,6 +199,7 @@ class FixtureCoordinator:
             )
             receipt = self._receipt(
                 request_id=request.request_id,
+                run_id=run_id,
                 hypothesis=hypothesis,
                 result=result,
             )
@@ -209,11 +239,13 @@ class FixtureCoordinator:
     def _receipt(
         *,
         request_id: UUID,
+        run_id: UUID,
         hypothesis: Hypothesis,
         result: Any,
     ) -> CollectionReceipt:
         content = {
             "schema_version": "1.0",
+            "run_id": str(run_id),
             "request_id": str(request_id),
             "tenant_id": str(hypothesis.tenant_id),
             "case_id": str(hypothesis.case_id),
