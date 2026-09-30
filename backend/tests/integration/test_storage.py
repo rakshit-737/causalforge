@@ -43,8 +43,9 @@ def test_database_schema_contains_phase1_tables(tmp_path) -> None:
 
     assert set(inspect(database.engine).get_table_names()) == {
         "audit_entries",
-            "claims",
-            "claim_verification_records",
+        "claims",
+        "claim_verification_records",
+        "collection_receipts",
         "detections",
         "document_chunks",
         "documents",
@@ -55,4 +56,5 @@ def test_database_schema_contains_phase1_tables(tmp_path) -> None:
         "tenants",
         "users",
         "verification_records",
+        "workflow_runs",
     }
