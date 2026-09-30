@@ -178,16 +178,22 @@ def list_workflow_runs(
                 .order_by(WorkflowRunRecord.created_at.desc())
             )
         )
-        snapshots = [
-            service.load(
-                session,
-                tenant_id=principal.tenant_id,
-                case_id=incident_id,
-                hypothesis_id=hypothesis_id,
-                run_id=UUID(run.id),
-            )
-            for run in runs
-        ]
+        try:
+            snapshots = [
+                service.load(
+                    session,
+                    tenant_id=principal.tenant_id,
+                    case_id=incident_id,
+                    hypothesis_id=hypothesis_id,
+                    run_id=UUID(run.id),
+                )
+                for run in runs
+            ]
+        except WorkflowStateError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="workflow state failed integrity checks",
+            ) from exc
     return [_workflow_response(snapshot) for snapshot in snapshots if snapshot is not None]
 
 
@@ -206,16 +212,22 @@ def get_workflow_run(
     """Read one workflow run only inside the authenticated tenant and case scope."""
 
     with database.session() as session:
-        snapshot = DurableFixtureWorkflow(
-            ingestion=engine.ingestion,
-            audit=engine.audit,
-        ).load(
-            session,
-            tenant_id=principal.tenant_id,
-            case_id=incident_id,
-            hypothesis_id=hypothesis_id,
-            run_id=run_id,
-        )
+        try:
+            snapshot = DurableFixtureWorkflow(
+                ingestion=engine.ingestion,
+                audit=engine.audit,
+            ).load(
+                session,
+                tenant_id=principal.tenant_id,
+                case_id=incident_id,
+                hypothesis_id=hypothesis_id,
+                run_id=run_id,
+            )
+        except WorkflowStateError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="workflow state failed integrity checks",
+            ) from exc
     if snapshot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="workflow run not found")
     return _workflow_response(snapshot)
