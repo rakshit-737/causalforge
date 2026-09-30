@@ -222,7 +222,9 @@ class FixtureCoordinator:
             "status": result.status,
             "trusted_source": result.trusted_source.model_dump(mode="json"),
             "event_ids": [str(event.event_id) for event in result.events],
-            "collected_at": result.collected_at.isoformat(),
+            "collected_at": result.collected_at.astimezone(UTC).isoformat().replace(
+                "+00:00", "Z"
+            ),
             "consumed_items": result.consumed_items,
             "rejected_items": result.rejected_items,
             "unmet_requirements": list(result.unmet_requirements),
