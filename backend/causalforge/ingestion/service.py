@@ -9,8 +9,10 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from causalforge.audit.ledger import AuditLedger
+from causalforge.domain.events import CanonicalEvent
 from causalforge.domain.evidence import EvidenceItem
 from causalforge.ingestion.normalizer import NormalizedEvent, normalize_event
+from causalforge.ingestion.redaction import RedactionResult
 from causalforge.storage.models.event import EventRecord
 from causalforge.storage.models.evidence import EvidenceRecord
 from causalforge.storage.repositories.events import EventRepository
@@ -94,6 +96,71 @@ class IngestionService:
                     "evidence_id": str(evidence_record.id),
                     "content_hash": evidence_record.content_hash,
                     "redacted_paths": list(normalized.redaction.paths),
+                },
+                policy_decision="allow",
+                created_at=collected,
+            )
+        return IngestResult(
+            normalized=normalized,
+            event_record=event_record,
+            evidence_record=evidence_record,
+            duplicate=not inserted,
+        )
+
+    def ingest_canonical(
+        self,
+        session: Session,
+        *,
+        event: CanonicalEvent,
+        case_id: UUID,
+        expected_tenant_id: UUID | None = None,
+        collected_at: datetime | None = None,
+        source_reliability: float = 1.0,
+        source_family: str | None = None,
+        redaction_profile: str = "default-v1",
+        redacted_paths: tuple[str, ...] = (),
+        actor: Mapping[str, str] | None = None,
+    ) -> IngestResult:
+        """Persist an already-normalized event without re-parsing untrusted input."""
+
+        if expected_tenant_id is not None and event.tenant_id != expected_tenant_id:
+            raise ValueError("event tenant does not match the requested case tenant")
+        event_record, inserted = self.events.append(session, event=event)
+        normalized_event = event if inserted else event_record.to_event()
+        normalized = NormalizedEvent(
+            event=normalized_event,
+            redaction=RedactionResult(
+                value=normalized_event.canonical_payload(),
+                paths=redacted_paths,
+            ),
+        )
+        collected = collected_at or datetime.now(UTC)
+        evidence = EvidenceItem.from_event(
+            normalized_event,
+            case_id=case_id,
+            collected_at=collected,
+            redaction_profile=redaction_profile,
+            source_reliability=source_reliability,
+            source_family=source_family or normalized_event.source.kind,
+        )
+        evidence_record, evidence_inserted = self.evidence.append(session, evidence=evidence)
+        if evidence_inserted:
+            self.audit.append(
+                session,
+                tenant_id=normalized_event.tenant_id,
+                case_id=case_id,
+                actor=actor
+                or {
+                    "kind": "connector",
+                    "id": normalized_event.source.name,
+                    "role": "ingest",
+                },
+                event_type="evidence.ingested",
+                payload={
+                    "event_id": str(normalized_event.event_id),
+                    "evidence_id": str(evidence_record.id),
+                    "content_hash": evidence_record.content_hash,
+                    "redacted_paths": list(redacted_paths),
                 },
                 policy_decision="allow",
                 created_at=collected,
