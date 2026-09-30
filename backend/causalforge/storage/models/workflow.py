@@ -1,6 +1,7 @@
 """Durable read-only workflow runs and collection receipts."""
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import JSON, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -113,6 +114,13 @@ class CollectionReceiptRecord(Base):
     ) -> "CollectionReceiptRecord":
         """Map a validated receipt to an immutable persistence row."""
 
+        if (
+            receipt.run_id != UUID(workflow_run_id)
+            or receipt.tenant_id != UUID(tenant_id)
+            or receipt.case_id != UUID(case_id)
+            or receipt.hypothesis_id != UUID(hypothesis_id)
+        ):
+            raise ValueError("collection receipt scope does not match its workflow row")
         return cls(
             id=str(receipt.receipt_id),
             workflow_run_id=workflow_run_id,
