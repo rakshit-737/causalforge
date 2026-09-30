@@ -5,6 +5,7 @@ import pytest
 
 from causalforge.domain.hypotheses import Hypothesis, RiskAssessment
 from causalforge.workflow.coordinator import CollectionReceipt, FixtureCoordinator
+from causalforge.workflow.planner import PlannerPolicy
 from causalforge.workflow.verifier import TrustedSource
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -112,3 +113,21 @@ def test_receipt_rejects_hash_or_identity_tampering() -> None:
 
     with pytest.raises(ValueError, match="receipt hash"):
         CollectionReceipt.model_validate(tampered)
+
+
+def test_coordinator_fails_closed_when_item_budget_truncates_fixture() -> None:
+    result = FixtureCoordinator().run(
+        hypothesis("fixture event replay"),
+        [
+            event_payload("00000000-0000-0000-0000-000000000101"),
+            event_payload("00000000-0000-0000-0000-000000000102"),
+        ],
+        parser_version="fixture-1.0",
+        trusted_source=SOURCE,
+        planner_policy=PlannerPolicy(max_items_per_request=1, max_total_items=1),
+        now=NOW,
+    )
+
+    assert result.status == "insufficient_evidence"
+    assert result.receipts[0].consumed_items == 1
+    assert "item_budget" in result.unmet_requirements
